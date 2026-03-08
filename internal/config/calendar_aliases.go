@@ -1,13 +1,19 @@
 package config
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 )
 
 func calendarAliasesField(cfg *File) *map[string]string {
 	return &cfg.CalendarAliases
 }
+
+var (
+	errCalendarAliasEmpty           = errors.New("calendar alias must not be empty")
+	errCalendarAliasHasWhitespace   = errors.New("calendar alias must not contain whitespace")
+	errCalendarAliasCalendarIDEmpty = errors.New("calendar ID must not be empty")
+)
 
 func NormalizeCalendarAlias(alias string) string {
 	return strings.ToLower(strings.TrimSpace(alias))
@@ -41,14 +47,17 @@ func ResolveCalendarID(calendarID string) (string, error) {
 func SetCalendarAlias(alias, calendarID string) error {
 	return setAliasValue(alias, calendarID, NormalizeCalendarAlias, strings.TrimSpace, func(alias, calendarID string) error {
 		if alias == "" {
-			return fmt.Errorf("calendar alias must not be empty")
+			return errCalendarAliasEmpty
 		}
+
 		if strings.ContainsAny(alias, " \t\r\n") {
-			return fmt.Errorf("calendar alias must not contain whitespace")
+			return errCalendarAliasHasWhitespace
 		}
+
 		if calendarID == "" {
-			return fmt.Errorf("calendar ID must not be empty")
+			return errCalendarAliasCalendarIDEmpty
 		}
+
 		return nil
 	}, calendarAliasesField)
 }

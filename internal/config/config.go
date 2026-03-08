@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,8 @@ type File struct {
 	ClientDomains   map[string]string `json:"client_domains,omitempty"`
 	CalendarAliases map[string]string `json:"calendar_aliases,omitempty"`
 }
+
+var errConfigLockTimeout = errors.New("acquire config lock timeout")
 
 func ConfigPath() (string, error) {
 	dir, err := Dir()
@@ -43,19 +46,23 @@ func acquireConfigLock() (func(), error) {
 	}
 
 	deadline := time.Now().Add(2 * time.Second)
+
 	for {
-		f, openErr := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		f, openErr := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) //nolint:gosec // lock path is computed inside the config dir
 		if openErr == nil {
 			_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
 			_ = f.Close()
 			return func() { _ = os.Remove(path) }, nil
 		}
+
 		if !os.IsExist(openErr) {
 			return nil, fmt.Errorf("acquire config lock: %w", openErr)
 		}
+
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("acquire config lock: timed out waiting for %s", path)
+			return nil, fmt.Errorf("%w: %s", errConfigLockTimeout, path)
 		}
+
 		time.Sleep(10 * time.Millisecond)
 	}
 }

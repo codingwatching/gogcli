@@ -19,12 +19,14 @@ func resolveAliasValue(alias string, normalizeAlias func(string) string, field a
 	}
 
 	value, ok := aliases[alias]
+
 	return value, ok, nil
 }
 
 func setAliasValue(alias, value string, normalizeAlias func(string) string, normalizeValue func(string) string, validate func(string, string) error, field aliasMapField) error {
 	alias = normalizeAlias(alias)
 	value = normalizeValue(value)
+
 	if err := validate(alias, value); err != nil {
 		return err
 	}
@@ -34,7 +36,9 @@ func setAliasValue(alias, value string, normalizeAlias func(string) string, norm
 		if *aliases == nil {
 			*aliases = map[string]string{}
 		}
+
 		(*aliases)[alias] = value
+
 		return nil
 	})
 }
@@ -48,13 +52,17 @@ func deleteAliasValue(alias string, normalizeAlias func(string) string, field al
 		if *aliases == nil {
 			return nil
 		}
+
 		if _, ok := (*aliases)[alias]; !ok {
 			return nil
 		}
+
 		delete(*aliases, alias)
 		deleted = true
+
 		return nil
 	})
+
 	return deleted, err
 }
 
