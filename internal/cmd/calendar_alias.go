@@ -70,12 +70,12 @@ func (c *CalendarAliasSetCmd) Run(ctx context.Context) error {
 	}
 	if outfmt.IsJSON(ctx) {
 		return outfmt.WriteJSON(ctx, os.Stdout, map[string]any{
-			"alias":      strings.ToLower(alias),
-			"calendarId": calendarID,
+			"alias":       strings.ToLower(alias),
+			"calendar_id": calendarID,
 		})
 	}
 	u.Out().Printf("alias\t%s", strings.ToLower(alias))
-	u.Out().Printf("calendarId\t%s", calendarID)
+	u.Out().Printf("calendar_id\t%s", calendarID)
 	return nil
 }
 

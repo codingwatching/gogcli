@@ -64,6 +64,35 @@ func TestCalendarAliasSetListUnset_JSON(t *testing.T) {
 	}
 }
 
+func TestCalendarAliasSetCmd_JSON_UsesSnakeCaseCalendarID(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg-config"))
+
+	u, err := ui.New(ui.Options{Stdout: os.Stdout, Stderr: os.Stderr, Color: "never"})
+	if err != nil {
+		t.Fatalf("ui.New: %v", err)
+	}
+	ctx := outfmt.WithMode(ui.WithUI(context.Background(), u), outfmt.Mode{JSON: true})
+
+	out := captureStdout(t, func() {
+		if runErr := runKong(t, &CalendarAliasSetCmd{}, []string{"family", "family-cal@group.calendar.google.com"}, ctx, &RootFlags{}); runErr != nil {
+			t.Fatalf("set: %v", runErr)
+		}
+	})
+
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("json parse: %v", err)
+	}
+	if got["calendar_id"] != "family-cal@group.calendar.google.com" {
+		t.Fatalf("calendar_id = %v", got["calendar_id"])
+	}
+	if _, ok := got["calendarId"]; ok {
+		t.Fatalf("unexpected camelCase key in output: %#v", got)
+	}
+}
+
 func TestCalendarAliasSetCmd_Validation(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
