@@ -453,11 +453,11 @@ func canUseNativeReplace(replacement string) bool {
 	if strings.Contains(replacement, "\\n") {
 		return false
 	}
-	// Backreferences ($1, ${1}, etc.)
+	// Backreferences ($0, $1, ${1}, etc.)
 	for i := 0; i < len(replacement)-1; i++ {
 		if replacement[i] == '$' {
 			next := replacement[i+1]
-			if (next >= '1' && next <= '9') || next == '{' {
+			if (next >= '0' && next <= '9') || next == '{' {
 				return false
 			}
 		}

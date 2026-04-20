@@ -100,6 +100,35 @@ func TestDocsSedCmd_RegexMatching(t *testing.T) {
 	}
 }
 
+func TestParseFullExpr_BackrefsSkipBraceFormatting(t *testing.T) {
+	testCases := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "whole match ampersand", expr: `s/foo/&/`, want: "${0}"},
+		{name: "capture backref", expr: `s/(foo)/\1/`, want: "${1}"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			expr, err := parseFullExpr(tc.expr)
+			if err != nil {
+				t.Fatalf("parseFullExpr: %v", err)
+			}
+			if expr.replacement != tc.want {
+				t.Fatalf("replacement = %q, want %q", expr.replacement, tc.want)
+			}
+			if expr.brace != nil || len(expr.braceSpans) != 0 {
+				t.Fatalf("backreference parsed as brace formatting: %#v %#v", expr.brace, expr.braceSpans)
+			}
+			if canUseNativeReplace(expr.replacement) {
+				t.Fatalf("backreference replacement should use manual path")
+			}
+		})
+	}
+}
+
 func compilePattern(pattern string) (*regexp.Regexp, error) {
 	return regexp.Compile(pattern)
 }
