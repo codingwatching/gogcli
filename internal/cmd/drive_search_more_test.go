@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -497,7 +498,7 @@ func TestDriveSearchCmd_DriveAndNoAllDrives_Conflicts(t *testing.T) {
 	t.Cleanup(func() { newDriveService = origNew })
 	newDriveService = func(context.Context, string) (*drive.Service, error) {
 		t.Fatal("newDriveService should not be called when flags conflict")
-		return nil, nil
+		return nil, errors.New("unexpected newDriveService call")
 	}
 
 	flags := &RootFlags{Account: "a@b.com"}
@@ -522,7 +523,7 @@ func TestDriveSearchCmd_ParentAndRawQuery_Conflicts(t *testing.T) {
 	t.Cleanup(func() { newDriveService = origNew })
 	newDriveService = func(context.Context, string) (*drive.Service, error) {
 		t.Fatal("newDriveService should not be called when flags conflict")
-		return nil, nil
+		return nil, errors.New("unexpected newDriveService call")
 	}
 
 	flags := &RootFlags{Account: "a@b.com"}

@@ -17,6 +17,7 @@ const (
 type docsLoadedTarget struct {
 	full   *docs.Document
 	target *docs.Document
+	tabID  string
 }
 
 func loadDocsTargetDocument(ctx context.Context, svc *docs.Service, docID, tabID string) (*docsLoadedTarget, error) {
@@ -39,9 +40,16 @@ func loadDocsTargetDocument(ctx context.Context, svc *docs.Service, docID, tabID
 		return &docsLoadedTarget{full: doc, target: doc}, nil
 	}
 
-	tab := findTab(flattenTabs(doc.Tabs), tabID)
-	if tab == nil {
-		return nil, fmt.Errorf("tab not found: %s", tabID)
+	tab, tabErr := findTab(flattenTabs(doc.Tabs), tabID)
+	if tabErr != nil {
+		return nil, tabErr
+	}
+	resolvedTabID := ""
+	if tab.TabProperties != nil {
+		resolvedTabID = strings.TrimSpace(tab.TabProperties.TabId)
+	}
+	if resolvedTabID == "" {
+		return nil, fmt.Errorf("tab has no ID: %s", tabID)
 	}
 	if tab.DocumentTab == nil || tab.DocumentTab.Body == nil {
 		return nil, fmt.Errorf("tab has no document body: %s", tabID)
@@ -54,6 +62,7 @@ func loadDocsTargetDocument(ctx context.Context, svc *docs.Service, docID, tabID
 			RevisionId: doc.RevisionId,
 			Body:       tab.DocumentTab.Body,
 		},
+		tabID: resolvedTabID,
 	}, nil
 }
 

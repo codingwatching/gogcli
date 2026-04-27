@@ -289,7 +289,7 @@ func fetchDriveFilesByMime(ctx context.Context, svc *drive.Service, mimeType str
 			OrderBy("modifiedTime desc").
 			Fields(gapi.Field("nextPageToken, files(id, name, mimeType, size, createdTime, modifiedTime, parents, owners, lastModifyingUser, webViewLink, driveId, md5Checksum, fileExtension)")).
 			Context(ctx)
-		call = driveFilesListCallWithDriveSupport(call, true)
+		call = driveFilesListCallWithDriveSupport(call, true, "")
 		if pageToken != "" {
 			call = call.PageToken(pageToken)
 		}

@@ -133,7 +133,7 @@ func fetchBackupDriveFiles(ctx context.Context, svc *drive.Service) ([]driveBack
 			OrderBy("modifiedTime desc").
 			Fields(gapi.Field("nextPageToken, files(id, name, mimeType, size, createdTime, modifiedTime, viewedByMeTime, parents, owners, lastModifyingUser, webViewLink, webContentLink, description, starred, trashed, explicitlyTrashed, shared, ownedByMe, driveId, md5Checksum, sha1Checksum, sha256Checksum, originalFilename, fileExtension, exportLinks, appProperties, properties)")).
 			Context(ctx)
-		call = driveFilesListCallWithDriveSupport(call, true)
+		call = driveFilesListCallWithDriveSupport(call, true, "")
 		if pageToken != "" {
 			call = call.PageToken(pageToken)
 		}

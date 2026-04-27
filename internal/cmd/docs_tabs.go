@@ -46,16 +46,6 @@ func findTab(tabs []*docs.Tab, query string) (*docs.Tab, error) {
 	return nil, fmt.Errorf("tab not found: %q (no tabs returned by API)", query)
 }
 
-func findTabByID(tabs []*docs.Tab, tabID string) *docs.Tab {
-	tabID = strings.TrimSpace(tabID)
-	for _, tab := range tabs {
-		if tab != nil && tab.TabProperties != nil && tab.TabProperties.TabId == tabID {
-			return tab
-		}
-	}
-	return nil
-}
-
 func tabTitle(tab *docs.Tab) string {
 	if tab.TabProperties != nil && tab.TabProperties.Title != "" {
 		return tab.TabProperties.Title

@@ -9,9 +9,11 @@
 - Backup: bound individual Drive content exports with `--drive-content-timeout` so one stuck Google export records an encrypted error row instead of blocking the full backup.
 - Backup: add Gmail message-list checkpoints, streaming shard construction, and stderr progress counters so full-mailbox backups can resume cleanly after interruption without keeping every raw message in RAM.
 - Calendar: add `--start-timezone` / `--end-timezone` to `calendar create` and `calendar update` for preserving named IANA event timezones when RFC3339 inputs only carry numeric offsets. (#422)
+- Drive: add `drive search --drive` and `--parent` for scoping search to a shared drive or folder. (#525) — thanks @LeanSheng.
 
 ### Fixed
 - Calendar: display `calendar events` times and JSON local fields in the calendar timezone instead of preserving arbitrary event offsets. (#493)
+- Docs: deprecate editing-command `--tab-id` in favor of `--tab`, and resolve tab titles to canonical tab IDs before mutations. (#533) — thanks @johnbenjaminlewis.
 - CLI: show direct Google Cloud API enablement links and matching `auth add --services ...` hints when Google returns API-not-enabled errors.
 - Gmail: apply Gmail system-label filters for searches like `in:spam is:unread` so thread, message, and batch message searches do not return read spam. (#449)
 - Gmail: build outbound `Date` headers with the configured timezone so replies do not inherit a wrong host-local offset. (#514, #472) — thanks @dinakars777.

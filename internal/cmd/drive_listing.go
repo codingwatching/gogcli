@@ -58,11 +58,13 @@ func (c *DriveSearchCmd) Run(ctx context.Context, flags *RootFlags) error {
 	if query == "" {
 		return usage("missing query")
 	}
+	driveID := strings.TrimSpace(c.Drive)
+	parentID := strings.TrimSpace(c.Parent)
 
-	if c.Drive != "" && !c.AllDrives {
+	if driveID != "" && !c.AllDrives {
 		return usage("--drive cannot be combined with --no-all-drives")
 	}
-	if c.Parent != "" && c.RawQuery {
+	if parentID != "" && c.RawQuery {
 		return usage("--parent cannot be combined with --raw-query; include the \"'<parentId>' in parents\" clause in your raw query instead")
 	}
 
@@ -72,8 +74,8 @@ func (c *DriveSearchCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 
 	finalQuery := buildDriveSearchQuery(query, c.RawQuery)
-	if c.Parent != "" {
-		finalQuery = fmt.Sprintf("'%s' in parents and %s", c.Parent, finalQuery)
+	if parentID != "" {
+		finalQuery = fmt.Sprintf("'%s' in parents and %s", escapeDriveQueryString(parentID), finalQuery)
 	}
 
 	resp, err := listDriveFiles(ctx, svc, driveFileListOptions{
@@ -81,7 +83,7 @@ func (c *DriveSearchCmd) Run(ctx context.Context, flags *RootFlags) error {
 		max:       c.Max,
 		page:      c.Page,
 		allDrives: c.AllDrives,
-		driveID:   c.Drive,
+		driveID:   driveID,
 	})
 	if err != nil {
 		return err

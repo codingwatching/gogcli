@@ -81,7 +81,7 @@ func TestDocsWriteUpdate_WithTab(t *testing.T) {
 	flags := &RootFlags{Account: "a@b.com"}
 	ctx := newDocsCmdContext(t)
 
-	if err := runKong(t, &DocsWriteCmd{}, []string{"doc1", "--text", "hello", "--tab", "t.second"}, ctx, flags); err != nil {
+	if err := runKong(t, &DocsWriteCmd{}, []string{"doc1", "--text", "hello", "--tab", "Second"}, ctx, flags); err != nil {
 		t.Fatalf("write replace: %v", err)
 	}
 	if got := batchRequests[0]; len(got) != 2 || got[0].DeleteContentRange == nil || got[1].InsertText == nil {
@@ -115,8 +115,8 @@ func TestDocsWriteUpdate_WithTab(t *testing.T) {
 		t.Fatalf("unexpected indexed update location: %#v", got)
 	}
 
-	if includeTabsCalls != 3 {
-		t.Fatalf("expected 3 tab-aware GET calls, got %d", includeTabsCalls)
+	if includeTabsCalls != 4 {
+		t.Fatalf("expected 4 tab-aware GET calls, got %d", includeTabsCalls)
 	}
 }
 
@@ -135,12 +135,12 @@ func TestDocsWriteUpdate_WithTab_TabNotFound(t *testing.T) {
 	ctx := newDocsCmdContext(t)
 
 	err := runKong(t, &DocsWriteCmd{}, []string{"doc1", "--text", "hello", "--tab", "t.missing"}, ctx, flags)
-	if err == nil || !strings.Contains(err.Error(), "tab not found: t.missing") {
+	if err == nil || !strings.Contains(err.Error(), `tab not found: "t.missing"`) {
 		t.Fatalf("unexpected write error: %v", err)
 	}
 
 	err = runKong(t, &DocsUpdateCmd{}, []string{"doc1", "--text", "hello", "--tab", "t.missing"}, ctx, flags)
-	if err == nil || !strings.Contains(err.Error(), "tab not found: t.missing") {
+	if err == nil || !strings.Contains(err.Error(), `tab not found: "t.missing"`) {
 		t.Fatalf("unexpected update error: %v", err)
 	}
 }
@@ -152,6 +152,11 @@ func TestDocsEditingCommands_WithTab(t *testing.T) {
 	var batchRequests [][]*docs.Request
 
 	docSvc, cleanup := newDocsServiceForTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/documents/") {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(tabsDocWithEndIndex())
+			return
+		}
 		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, ":batchUpdate") {
 			var req docs.BatchUpdateDocumentRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -173,25 +178,25 @@ func TestDocsEditingCommands_WithTab(t *testing.T) {
 	flags := &RootFlags{Account: "a@b.com"}
 	ctx := newDocsCmdContext(t)
 
-	if err := runKong(t, &DocsInsertCmd{}, []string{"doc1", "hello", "--index", "5", "--tab", "t.abc"}, ctx, flags); err != nil {
+	if err := runKong(t, &DocsInsertCmd{}, []string{"doc1", "hello", "--index", "5", "--tab", "Second"}, ctx, flags); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
-	if got := batchRequests[0][0].InsertText.Location; got.TabId != "t.abc" || got.Index != 5 {
+	if got := batchRequests[0][0].InsertText.Location; got.TabId != "t.second" || got.Index != 5 {
 		t.Fatalf("unexpected insert location: %#v", got)
 	}
 
-	if err := runKong(t, &DocsDeleteCmd{}, []string{"doc1", "--start", "2", "--end", "7", "--tab", "t.abc"}, ctx, flags); err != nil {
+	if err := runKong(t, &DocsDeleteCmd{}, []string{"doc1", "--start", "2", "--end", "7", "--tab", "Second"}, ctx, flags); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if got := batchRequests[1][0].DeleteContentRange.Range; got.TabId != "t.abc" || got.StartIndex != 2 || got.EndIndex != 7 {
+	if got := batchRequests[1][0].DeleteContentRange.Range; got.TabId != "t.second" || got.StartIndex != 2 || got.EndIndex != 7 {
 		t.Fatalf("unexpected delete range: %#v", got)
 	}
 
-	if err := runKong(t, &DocsFindReplaceCmd{}, []string{"doc1", "old", "new", "--tab", "t.abc"}, ctx, flags); err != nil {
+	if err := runKong(t, &DocsFindReplaceCmd{}, []string{"doc1", "old", "new", "--tab", "Second"}, ctx, flags); err != nil {
 		t.Fatalf("find-replace: %v", err)
 	}
 	req := batchRequests[2][0].ReplaceAllText
-	if req == nil || req.TabsCriteria == nil || len(req.TabsCriteria.TabIds) != 1 || req.TabsCriteria.TabIds[0] != "t.abc" {
+	if req == nil || req.TabsCriteria == nil || len(req.TabsCriteria.TabIds) != 1 || req.TabsCriteria.TabIds[0] != "t.second" {
 		t.Fatalf("unexpected tabs criteria: %#v", req)
 	}
 }

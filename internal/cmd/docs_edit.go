@@ -91,10 +91,11 @@ func (c *DocsWriteCmd) writePlainText(ctx context.Context, flags *RootFlags, doc
 		return err
 	}
 
-	endIndex, err := docsTargetEndIndex(ctx, svc, docID, c.Tab)
+	endIndex, tabID, err := docsTargetEndIndexAndTabID(ctx, svc, docID, c.Tab)
 	if err != nil {
 		return err
 	}
+	c.Tab = tabID
 	insertIndex := int64(1)
 	if c.Append {
 		insertIndex = docsAppendIndex(endIndex)
@@ -296,11 +297,18 @@ func (c *DocsUpdateCmd) Run(ctx context.Context, kctx *kong.Context, flags *Root
 
 	insertIndex := c.Index
 	if insertIndex <= 0 {
-		endIndex, endErr := docsTargetEndIndex(ctx, svc, id, c.Tab)
+		endIndex, tabID, endErr := docsTargetEndIndexAndTabID(ctx, svc, id, c.Tab)
 		if endErr != nil {
 			return endErr
 		}
+		c.Tab = tabID
 		insertIndex = docsAppendIndex(endIndex)
+	} else if c.Tab != "" {
+		tabID, tabErr := resolveDocsTabID(ctx, svc, id, c.Tab)
+		if tabErr != nil {
+			return tabErr
+		}
+		c.Tab = tabID
 	}
 
 	reqs := []*docs.Request{{
@@ -386,6 +394,13 @@ func (c *DocsInsertCmd) Run(ctx context.Context, flags *RootFlags) error {
 	if err != nil {
 		return err
 	}
+	if c.Tab != "" {
+		tabID, tabErr := resolveDocsTabID(ctx, svc, docID, c.Tab)
+		if tabErr != nil {
+			return tabErr
+		}
+		c.Tab = tabID
+	}
 
 	result, err := svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
 		Requests: []*docs.Request{{
@@ -449,6 +464,13 @@ func (c *DocsDeleteCmd) Run(ctx context.Context, flags *RootFlags) error {
 	svc, err := requireDocsService(ctx, flags)
 	if err != nil {
 		return err
+	}
+	if c.Tab != "" {
+		tabID, tabErr := resolveDocsTabID(ctx, svc, docID, c.Tab)
+		if tabErr != nil {
+			return tabErr
+		}
+		c.Tab = tabID
 	}
 
 	result, err := svc.Documents.BatchUpdate(docID, &docs.BatchUpdateDocumentRequest{
@@ -560,6 +582,13 @@ func (c *DocsFindReplaceCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 
 	if !c.First && format == docsContentFormatPlain {
+		if c.Tab != "" {
+			tabID, tabErr := resolveDocsTabID(ctx, svc, docID, c.Tab)
+			if tabErr != nil {
+				return tabErr
+			}
+			c.Tab = tabID
+		}
 		return c.runReplaceAll(ctx, u, svc, docID, replaceText)
 	}
 
@@ -567,6 +596,7 @@ func (c *DocsFindReplaceCmd) Run(ctx context.Context, flags *RootFlags) error {
 	if err != nil {
 		return err
 	}
+	c.Tab = loaded.tabID
 	doc := loaded.full
 	targetDoc := loaded.target
 
