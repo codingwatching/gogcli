@@ -259,13 +259,15 @@ Raw message payloads stay base64url encoded inside encrypted JSONL. This
 preserves the RFC 2822 message content while keeping the shard format text
 friendly.
 
-By default, each fetched raw message is also cached locally under the OS user
-cache directory (`gogcli/backup/gmail/<account-hash>/raw-v1/`). The cache stores
-the same raw message row that will be encrypted into shards and is keyed by a
-SHA-256 of the Gmail message ID, so rerunning after an interruption can reuse
-already fetched messages. `--gmail-refresh-cache` forces a refetch. The cache is
-plaintext local data; clear it if the machine should not retain local mail
-copies outside the encrypted backup/export locations.
+By default, Gmail backup state is cached locally under the OS user cache
+directory (`gogcli/backup/gmail/<account-hash>/`). Message-list page checkpoints
+live under `list-v1/`, and fetched raw messages live under `raw-v1/`. Raw-message
+cache files store the same row that will be encrypted into shards and are keyed
+by a SHA-256 of the Gmail message ID, so rerunning after an interruption can
+reuse already fetched messages. Long Gmail runs report list/fetch counters to
+stderr while stdout stays parseable. `--gmail-refresh-cache` forces a refetch.
+The cache is plaintext local data; clear it if the machine should not retain
+local mail copies outside the encrypted backup/export locations.
 
 `--include-spam-trash` defaults to true. Use `--query` and `--max` for bounded
 test exports; omit them for a full mailbox scan.

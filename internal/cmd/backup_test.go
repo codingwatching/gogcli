@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,6 +18,7 @@ import (
 	"google.golang.org/api/option"
 
 	"github.com/steipete/gogcli/internal/backup"
+	"github.com/steipete/gogcli/internal/ui"
 )
 
 func TestBackupAccountHashStableAndOpaque(t *testing.T) {
@@ -171,6 +174,130 @@ func TestGmailBackupMessageCacheRejectsWrongID(t *testing.T) {
 	}
 	if _, _, err := readGmailBackupMessageCache("accthash", "msg-one"); err == nil {
 		t.Fatal("expected wrong cache ID to fail")
+	}
+}
+
+func TestListGmailBackupMessageIDsResumesFromCheckpoint(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	opts := gmailBackupOptions{
+		AccountHash:      "accthash",
+		IncludeSpamTrash: true,
+		CacheMessages:    true,
+	}
+	path, ok := gmailBackupListStatePath(opts)
+	if !ok {
+		t.Fatal("expected list state path")
+	}
+	if err := writeGmailBackupListState(path, opts, []string{"m1"}, "p2", false); err != nil {
+		t.Fatalf("writeGmailBackupListState: %v", err)
+	}
+
+	requests := 0
+	svc, cleanup := newGmailServiceForTest(t, func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if got := r.URL.Query().Get("pageToken"); got != "p2" {
+			t.Fatalf("pageToken = %q, want p2", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"messages": []map[string]string{{"id": "m2"}},
+		})
+	})
+	defer cleanup()
+
+	var stderr bytes.Buffer
+	u, err := ui.New(ui.Options{Stdout: io.Discard, Stderr: &stderr, Color: "never"})
+	if err != nil {
+		t.Fatalf("ui.New: %v", err)
+	}
+	ids, err := listGmailBackupMessageIDs(ui.WithUI(context.Background(), u), svc, opts)
+	if err != nil {
+		t.Fatalf("listGmailBackupMessageIDs: %v", err)
+	}
+	if strings.Join(ids, ",") != "m1,m2" {
+		t.Fatalf("ids = %v, want [m1 m2]", ids)
+	}
+	if requests != 1 {
+		t.Fatalf("requests = %d, want 1", requests)
+	}
+	if !strings.Contains(stderr.String(), "resume=partial") || !strings.Contains(stderr.String(), "messages=2") {
+		t.Fatalf("stderr missing progress: %s", stderr.String())
+	}
+	state, ok, err := readGmailBackupListState(path)
+	if err != nil {
+		t.Fatalf("readGmailBackupListState: %v", err)
+	}
+	if !ok || !state.Complete || strings.Join(state.IDs, ",") != "m1,m2" {
+		t.Fatalf("state = %#v ok=%t", state, ok)
+	}
+}
+
+func TestListGmailBackupMessageIDsReusesCompleteCheckpoint(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	opts := gmailBackupOptions{
+		AccountHash:      "accthash",
+		IncludeSpamTrash: true,
+		CacheMessages:    true,
+	}
+	path, ok := gmailBackupListStatePath(opts)
+	if !ok {
+		t.Fatal("expected list state path")
+	}
+	if err := writeGmailBackupListState(path, opts, []string{"m1", "m2"}, "", true); err != nil {
+		t.Fatalf("writeGmailBackupListState: %v", err)
+	}
+
+	requests := 0
+	svc, cleanup := newGmailServiceForTest(t, func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		http.NotFound(w, r)
+	})
+	defer cleanup()
+
+	ids, err := listGmailBackupMessageIDs(context.Background(), svc, opts)
+	if err != nil {
+		t.Fatalf("listGmailBackupMessageIDs: %v", err)
+	}
+	if strings.Join(ids, ",") != "m1,m2" {
+		t.Fatalf("ids = %v, want [m1 m2]", ids)
+	}
+	if requests != 0 {
+		t.Fatalf("requests = %d, want 0", requests)
+	}
+}
+
+func TestListGmailBackupMessageIDsMarksMaxLimitedRunComplete(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	opts := gmailBackupOptions{
+		AccountHash:      "accthash",
+		Max:              1,
+		IncludeSpamTrash: true,
+		CacheMessages:    true,
+	}
+	svc, cleanup := newGmailServiceForTest(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"messages":      []map[string]string{{"id": "m1"}},
+			"nextPageToken": "p2",
+		})
+	})
+	defer cleanup()
+
+	ids, err := listGmailBackupMessageIDs(context.Background(), svc, opts)
+	if err != nil {
+		t.Fatalf("listGmailBackupMessageIDs: %v", err)
+	}
+	if strings.Join(ids, ",") != "m1" {
+		t.Fatalf("ids = %v, want [m1]", ids)
+	}
+	path, ok := gmailBackupListStatePath(opts)
+	if !ok {
+		t.Fatal("expected list state path")
+	}
+	state, ok, err := readGmailBackupListState(path)
+	if err != nil {
+		t.Fatalf("readGmailBackupListState: %v", err)
+	}
+	if !ok || !state.Complete || state.PageToken != "" {
+		t.Fatalf("state = %#v ok=%t", state, ok)
 	}
 }
 

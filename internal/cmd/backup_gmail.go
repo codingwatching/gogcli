@@ -16,6 +16,7 @@ import (
 	"google.golang.org/api/gmail/v1"
 
 	"github.com/steipete/gogcli/internal/backup"
+	"github.com/steipete/gogcli/internal/ui"
 )
 
 type gmailBackupOptions struct {
@@ -48,6 +49,18 @@ type gmailBackupLabel struct {
 	MessagesUnread        int64  `json:"messagesUnread,omitempty"`
 	ThreadsTotal          int64  `json:"threadsTotal,omitempty"`
 	ThreadsUnread         int64  `json:"threadsUnread,omitempty"`
+}
+
+type gmailBackupListState struct {
+	Version          int       `json:"version"`
+	AccountHash      string    `json:"accountHash"`
+	Query            string    `json:"query,omitempty"`
+	Max              int64     `json:"max,omitempty"`
+	IncludeSpamTrash bool      `json:"includeSpamTrash"`
+	PageToken        string    `json:"pageToken,omitempty"`
+	IDs              []string  `json:"ids"`
+	Complete         bool      `json:"complete"`
+	Updated          time.Time `json:"updated"`
 }
 
 func buildGmailBackupSnapshot(ctx context.Context, flags *RootFlags, opts gmailBackupOptions) (backup.Snapshot, error) {
@@ -125,11 +138,13 @@ func fetchGmailBackupMessages(ctx context.Context, svc *gmail.Service, opts gmai
 	if err != nil {
 		return nil, err
 	}
+	gmailBackupProgressf(ctx, "backup gmail fetch\tqueued=%d", len(ids))
 	const maxConcurrency = 8
 	sem := make(chan struct{}, maxConcurrency)
 	type result struct {
 		index int
 		msg   gmailBackupMessage
+		cache bool
 		err   error
 	}
 	results := make(chan result, len(ids))
@@ -152,7 +167,7 @@ func fetchGmailBackupMessages(ctx context.Context, svc *gmail.Service, opts gmai
 					return
 				}
 				if ok {
-					results <- result{index: index, msg: msg}
+					results <- result{index: index, msg: msg, cache: true}
 					return
 				}
 			}
@@ -193,11 +208,23 @@ func fetchGmailBackupMessages(ctx context.Context, svc *gmail.Service, opts gmai
 	}()
 	ordered := make([]gmailBackupMessage, len(ids))
 	var firstErr error
+	done := 0
+	cacheHits := 0
+	fetched := 0
 	for res := range results {
 		if res.err != nil && firstErr == nil {
 			firstErr = res.err
 		}
 		ordered[res.index] = res.msg
+		done++
+		if res.cache {
+			cacheHits++
+		} else if res.err == nil {
+			fetched++
+		}
+		if done == len(ids) || done%100 == 0 {
+			gmailBackupProgressf(ctx, "backup gmail fetch\t%d/%d\tfetched=%d\tcache=%d", done, len(ids), fetched, cacheHits)
+		}
 	}
 	if firstErr != nil {
 		return nil, firstErr
@@ -288,6 +315,23 @@ func gmailBackupMessageCachePath(accountHash, messageID string) (string, bool) {
 func listGmailBackupMessageIDs(ctx context.Context, svc *gmail.Service, opts gmailBackupOptions) ([]string, error) {
 	var ids []string
 	pageToken := ""
+	statePath, hasStatePath := gmailBackupListStatePath(opts)
+	if opts.CacheMessages && !opts.RefreshCache && hasStatePath {
+		state, ok, err := readGmailBackupListState(statePath)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			if state.Complete {
+				gmailBackupProgressf(ctx, "backup gmail list\tresume=complete\tmessages=%d", len(state.IDs))
+				return append([]string(nil), state.IDs...), nil
+			}
+			ids = append(ids, state.IDs...)
+			pageToken = state.PageToken
+			gmailBackupProgressf(ctx, "backup gmail list\tresume=partial\tmessages=%d", len(ids))
+		}
+	}
+	gmailBackupProgressf(ctx, "backup gmail list\tstart\tmessages=%d", len(ids))
 	for {
 		maxResults := int64(500)
 		if opts.Max > 0 {
@@ -319,12 +363,121 @@ func listGmailBackupMessageIDs(ctx context.Context, svc *gmail.Service, opts gma
 				ids = append(ids, message.Id)
 			}
 		}
-		if resp.NextPageToken == "" {
+		gmailBackupProgressf(ctx, "backup gmail list\tmessages=%d", len(ids))
+		complete := resp.NextPageToken == "" || (opts.Max > 0 && int64(len(ids)) >= opts.Max)
+		if complete {
+			if opts.CacheMessages && hasStatePath {
+				if err := writeGmailBackupListState(statePath, opts, ids, "", true); err != nil {
+					return nil, err
+				}
+			}
 			break
 		}
 		pageToken = resp.NextPageToken
+		if opts.CacheMessages && hasStatePath {
+			if err := writeGmailBackupListState(statePath, opts, ids, pageToken, false); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return ids, nil
+}
+
+func readGmailBackupListState(path string) (gmailBackupListState, bool, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // path is derived from the OS cache dir and query hash.
+	if err != nil {
+		if os.IsNotExist(err) {
+			return gmailBackupListState{}, false, nil
+		}
+		return gmailBackupListState{}, false, fmt.Errorf("read gmail backup list state %s: %w", path, err)
+	}
+	var state gmailBackupListState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return gmailBackupListState{}, false, fmt.Errorf("decode gmail backup list state %s: %w", path, err)
+	}
+	if state.Version != 1 {
+		return gmailBackupListState{}, false, nil
+	}
+	return state, true, nil
+}
+
+func writeGmailBackupListState(path string, opts gmailBackupOptions, ids []string, pageToken string, complete bool) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create gmail backup list state dir: %w", err)
+	}
+	state := gmailBackupListState{
+		Version:          1,
+		AccountHash:      opts.AccountHash,
+		Query:            strings.TrimSpace(opts.Query),
+		Max:              opts.Max,
+		IncludeSpamTrash: opts.IncludeSpamTrash,
+		PageToken:        pageToken,
+		IDs:              append([]string(nil), ids...),
+		Complete:         complete,
+		Updated:          time.Now().UTC(),
+	}
+	data, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("encode gmail backup list state: %w", err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".list-*.json")
+	if err != nil {
+		return fmt.Errorf("create gmail backup list state temp: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("write gmail backup list state temp: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close gmail backup list state temp: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("chmod gmail backup list state temp: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("replace gmail backup list state %s: %w", path, err)
+	}
+	return nil
+}
+
+func gmailBackupListStatePath(opts gmailBackupOptions) (string, bool) {
+	accountHash := strings.TrimSpace(opts.AccountHash)
+	if accountHash == "" {
+		return "", false
+	}
+	dir, err := os.UserCacheDir()
+	if err != nil || strings.TrimSpace(dir) == "" {
+		return "", false
+	}
+	key := struct {
+		Query            string `json:"query,omitempty"`
+		Max              int64  `json:"max,omitempty"`
+		IncludeSpamTrash bool   `json:"includeSpamTrash"`
+	}{
+		Query:            strings.TrimSpace(opts.Query),
+		Max:              opts.Max,
+		IncludeSpamTrash: opts.IncludeSpamTrash,
+	}
+	data, err := json.Marshal(key)
+	if err != nil {
+		return "", false
+	}
+	sum := sha256.Sum256(data)
+	name := hex.EncodeToString(sum[:]) + ".json"
+	return filepath.Join(dir, "gogcli", "backup", "gmail", accountHash, "list-v1", name), true
+}
+
+func gmailBackupProgressf(ctx context.Context, format string, args ...any) {
+	u := ui.FromContext(ctx)
+	if u == nil {
+		return
+	}
+	u.Err().Printf(format, args...)
 }
 
 func buildGmailMessageShards(accountHash string, messages []gmailBackupMessage, shardMaxRows int) ([]backup.PlainShard, error) {
