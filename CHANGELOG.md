@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.0 - Unreleased
 
 ### Added
 - Backup: add `gog backup` with age-encrypted Git shards, Gmail labels/raw message export, manifest status, full decrypt-and-verify, docs, and security-focused regression coverage.
