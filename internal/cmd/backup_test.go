@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/api/drive/v3"
+
 	"github.com/steipete/gogcli/internal/backup"
 )
 
@@ -91,6 +93,49 @@ func TestMergeBackupSnapshotsKeepsCountsAndShardOrder(t *testing.T) {
 	}
 }
 
+func TestExpandBackupServicesAllIncludesWorkspaceAdapters(t *testing.T) {
+	got := strings.Join(expandBackupServices([]string{"all"}), ",")
+	for _, want := range []string{
+		"appscript",
+		"calendar",
+		"chat",
+		"classroom",
+		"contacts",
+		"drive",
+		"gmail",
+		"gmail-settings",
+		"tasks",
+		"workspace",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expanded all missing %q in %q", want, got)
+		}
+	}
+}
+
+func TestDriveBackupContentPlansPreferReadableWorkspaceFormats(t *testing.T) {
+	docPlans := driveBackupContentPlans(&drive.File{Id: "doc1", Name: "Spec", MimeType: driveMimeGoogleDoc}, false)
+	if len(docPlans) != 2 || docPlans[0].Extension != ".docx" || docPlans[1].Extension != ".md" {
+		t.Fatalf("unexpected doc plans: %#v", docPlans)
+	}
+	sheetPlans := driveBackupContentPlans(&drive.File{Id: "sheet1", Name: "Budget", MimeType: driveMimeGoogleSheet}, false)
+	if len(sheetPlans) != 1 || sheetPlans[0].Extension != ".xlsx" {
+		t.Fatalf("unexpected sheet plans: %#v", sheetPlans)
+	}
+	folderPlans := driveBackupContentPlans(&drive.File{Id: "folder1", Name: "Folder", MimeType: driveMimeGoogleFolder}, false)
+	if len(folderPlans) != 0 {
+		t.Fatalf("folder should not have content plans: %#v", folderPlans)
+	}
+	binaryPlans := driveBackupContentPlans(&drive.File{Id: "bin1", Name: "Archive.zip", MimeType: "application/zip"}, false)
+	if len(binaryPlans) != 0 {
+		t.Fatalf("binary should be opt-in: %#v", binaryPlans)
+	}
+	binaryPlans = driveBackupContentPlans(&drive.File{Id: "bin1", Name: "Archive.zip", MimeType: "application/zip"}, true)
+	if len(binaryPlans) != 1 || binaryPlans[0].Source != "download" {
+		t.Fatalf("unexpected binary plans: %#v", binaryPlans)
+	}
+}
+
 func TestDecodeGmailRawAcceptsBase64URLVariants(t *testing.T) {
 	payload := []byte("Subject: Hello\r\n\r\nBody")
 	raw := base64.RawURLEncoding.EncodeToString(payload)
@@ -145,6 +190,40 @@ func TestExportGmailMessagesWritesReadableEMLAndIndex(t *testing.T) {
 	}
 	index := readText(t, filepath.Join(outDir, "gmail", "acct_hash", "messages", "index.jsonl"))
 	if !strings.Contains(index, `"id":"msg/one"`) || !strings.Contains(index, `"eml":"`+emlRel+`"`) {
+		t.Fatalf("index missing expected fields: %s", index)
+	}
+}
+
+func TestExportDriveContentsWritesReadableFilesAndIndex(t *testing.T) {
+	outDir := t.TempDir()
+	row := driveBackupContent{
+		FileID:     "file/one",
+		Name:       "Quarterly Plan",
+		MimeType:   driveMimeGoogleDoc,
+		ExportName: "Quarterly_Plan.md",
+		ExportMime: mimeTextMarkdown,
+		Source:     "export",
+		Size:       8,
+		DataBase64: base64.StdEncoding.EncodeToString([]byte("# Plan\n")),
+	}
+	shard, err := backup.NewJSONLShard("drive", "contents", "acct/hash", "data/drive/acct/contents/part-0001.jsonl.gz.age", []driveBackupContent{row})
+	if err != nil {
+		t.Fatalf("NewJSONLShard: %v", err)
+	}
+
+	files, count, err := exportDriveContents(outDir, shard)
+	if err != nil {
+		t.Fatalf("exportDriveContents: %v", err)
+	}
+	if files != 2 || count != 1 {
+		t.Fatalf("files,count = %d,%d want 2,1", files, count)
+	}
+	exported := readText(t, filepath.Join(outDir, "drive", "acct_hash", "files", "file_one", "Quarterly_Plan.md"))
+	if exported != "# Plan\n" {
+		t.Fatalf("exported = %q", exported)
+	}
+	index := readText(t, filepath.Join(outDir, "drive", "acct_hash", "files", "index.jsonl"))
+	if !strings.Contains(index, `"fileId":"file/one"`) || !strings.Contains(index, `"path":"drive/acct_hash/files/file_one/Quarterly_Plan.md"`) {
 		t.Fatalf("index missing expected fields: %s", index)
 	}
 }

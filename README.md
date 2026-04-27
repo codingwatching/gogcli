@@ -9,7 +9,7 @@ Fast, script-friendly CLI for Gmail, Calendar, Chat, Classroom, Drive, Docs, Sli
 
 - **Gmail** - search threads/messages, send mail, view attachments, manage labels/drafts/filters/delegation/vacation settings, auto-reply once to matching mail, modify single messages, export filters, inspect history, and run Pub/Sub watch webhooks
 - **Email tracking** - track opens for `gog gmail send --track` with a small Cloudflare Worker backend
-- **Encrypted backups** - export Google account data to age-encrypted Git shards (`gog backup`, Gmail first)
+- **Encrypted backups** - export Google account data to age-encrypted Git shards (`gog backup`)
 - **Calendar** - list/create/update/delete events, manage invitations, aliases, subscriptions, team calendars, free/busy/conflicts, propose new times, focus/OOO/working-location events, recurrence, and reminders
 - **Classroom** - manage courses, roster, coursework/materials, submissions, announcements, topics, invitations, guardians, profiles
 - **Chat** - list/find/create spaces, list messages/threads, send messages and DMs, and manage emoji reactions (Workspace-only)
@@ -743,15 +743,21 @@ private age identity locally at `~/.gog/age.key`; GitHub only receives public
 `age1...` recipients, `manifest.json`, and encrypted `*.jsonl.gz.age` payloads.
 The private `AGE-SECRET-KEY-...` value must stay local or in a password manager.
 
-Supported backup services are `gmail`, `calendar`, `contacts`, `tasks`, and
-`drive` metadata; `all` expands to those services. A service-specific push
-updates that service and preserves existing shards for services that were not
-selected, as long as recipients are unchanged.
+Supported backup services are `gmail`, `gmail-settings`, `calendar`,
+`contacts`, `tasks`, `drive`, `workspace`, `appscript`, `chat`, and
+`classroom`; `all` expands to those services. Drive now stores metadata plus
+exported Google-native file content by default. Non-Google binary Drive files
+are metadata-only unless `--drive-binary-contents` is set. Workspace inventories
+Docs/Sheets/Slides and backs up Forms/responses discovered through Drive; add
+`--workspace-native` for full native Docs/Sheets/Slides API JSON.
+Optional Workspace-only services use `--best-effort` by default, recording
+permission/auth errors as encrypted error shards instead of stopping the run.
 
 Use `gog backup cat` to decrypt one shard as JSONL, or `gog backup export` to
 write a local plaintext copy. The export writes Gmail messages as `.eml` files,
 plus `gmail/<account-hash>/messages/index.jsonl` and pretty `labels.json`.
-Other services export as verified JSONL under `raw/`.
+Drive contents export as normal files under `drive/<account-hash>/files/` with
+an `index.jsonl`; other services export as verified JSONL under `raw/`.
 That export is intentionally unencrypted; keep it out of Git, shared folders,
 and cloud sync unless that is intentional.
 

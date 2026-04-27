@@ -101,7 +101,7 @@ func (c *BackupExportCmd) Run(ctx context.Context) error {
 	if manifestErr := writeJSONFile(filepath.Join(outDir, "manifest.json"), manifest); manifestErr != nil {
 		return manifestErr
 	}
-	if resetErr := resetGmailExportIndexes(outDir, shards); resetErr != nil {
+	if resetErr := resetExportIndexes(outDir, shards); resetErr != nil {
 		return resetErr
 	}
 	for _, shard := range shards {
@@ -205,13 +205,19 @@ func ensureExportOutsideRepo(outDir, repo string) error {
 	return nil
 }
 
-func resetGmailExportIndexes(outDir string, shards []backup.PlainShard) error {
+func resetExportIndexes(outDir string, shards []backup.PlainShard) error {
 	seen := map[string]struct{}{}
 	for _, shard := range shards {
-		if shard.Service != backupServiceGmail || shard.Kind != "messages" {
+		index := ""
+		switch {
+		case shard.Service == backupServiceGmail && shard.Kind == "messages":
+			index = filepath.Join(outDir, backupServiceGmail, sanitizeFilePart(shard.Account), "messages", "index.jsonl")
+		case shard.Service == backupServiceDrive && shard.Kind == "contents":
+			index = filepath.Join(outDir, backupServiceDrive, sanitizeFilePart(shard.Account), "files", "index.jsonl")
+		}
+		if index == "" {
 			continue
 		}
-		index := filepath.Join(outDir, backupServiceGmail, sanitizeFilePart(shard.Account), "messages", "index.jsonl")
 		if _, ok := seen[index]; ok {
 			continue
 		}
@@ -249,6 +255,8 @@ func writeJSONFile(path string, value any) error {
 
 func exportPlainShard(outDir string, shard backup.PlainShard) (int, int, error) {
 	switch {
+	case shard.Service == backupServiceDrive && shard.Kind == "contents":
+		return exportDriveContents(outDir, shard)
 	case shard.Service == backupServiceGmail && shard.Kind == "labels":
 		return exportGmailLabels(outDir, shard)
 	case shard.Service == backupServiceGmail && shard.Kind == "messages":
@@ -256,6 +264,61 @@ func exportPlainShard(outDir string, shard backup.PlainShard) (int, int, error) 
 	default:
 		return exportRawShard(outDir, shard)
 	}
+}
+
+func exportDriveContents(outDir string, shard backup.PlainShard) (int, int, error) {
+	var rows []driveBackupContent
+	if err := backup.DecodeJSONL(shard.Plaintext, &rows); err != nil {
+		return 0, 0, err
+	}
+	account := sanitizeFilePart(shard.Account)
+	indexPath := filepath.Join(outDir, backupServiceDrive, account, "files", "index.jsonl")
+	if err := os.MkdirAll(filepath.Dir(indexPath), 0o700); err != nil {
+		return 0, 0, err
+	}
+	indexFile, err := os.OpenFile(indexPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) // #nosec G304 -- path is confined to caller-selected export dir and sanitized account.
+	if err != nil {
+		return 0, 0, err
+	}
+	defer indexFile.Close()
+	enc := json.NewEncoder(indexFile)
+	enc.SetEscapeHTML(false)
+	files := 0
+	for _, row := range rows {
+		rel := filepath.ToSlash(filepath.Join(backupServiceDrive, account, "files", sanitizeFilePart(row.FileID), sanitizeFilePart(row.ExportName)))
+		indexRow := map[string]any{
+			"fileId":         row.FileID,
+			"name":           row.Name,
+			"mimeType":       row.MimeType,
+			"exportName":     row.ExportName,
+			"exportMimeType": row.ExportMime,
+			"source":         row.Source,
+			"size":           row.Size,
+			"modifiedTime":   row.ModifiedTime,
+			"path":           rel,
+			"skipped":        row.Skipped,
+			"error":          row.Error,
+		}
+		if err := enc.Encode(indexRow); err != nil {
+			return files, 0, err
+		}
+		if row.DataBase64 == "" {
+			continue
+		}
+		data, err := base64.StdEncoding.DecodeString(row.DataBase64)
+		if err != nil {
+			return files, 0, fmt.Errorf("decode Drive content %s: %w", row.FileID, err)
+		}
+		path := filepath.Join(outDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return files, 0, err
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			return files, 0, err
+		}
+		files++
+	}
+	return files + 1, len(rows), nil
 }
 
 func exportGmailLabels(outDir string, shard backup.PlainShard) (int, int, error) {

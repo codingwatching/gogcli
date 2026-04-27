@@ -72,16 +72,41 @@ remote.
 Supported services:
 
 - `gmail`: labels and raw MIME messages.
+- `gmail-settings`: filters, forwarding addresses, auto-forwarding, send-as
+  aliases, vacation responder, delegate visibility, POP, IMAP, and language
+  settings.
 - `calendar`: calendar list entries and all events, including deleted events.
 - `contacts`: People API contacts and other contacts.
 - `tasks`: task lists and tasks, including completed, deleted, hidden, and
   assigned tasks.
-- `drive`: shared drives and Drive file metadata. File contents are not copied
-  by the Drive adapter yet.
+- `drive`: shared drives, Drive file metadata, and downloaded/exported file
+  content. Google Docs export as `.docx` and Markdown, Sheets as `.xlsx`,
+  Slides as `.pptx` and PDF, Drawings as PNG and PDF, and binary files as
+  metadata-only unless `--drive-binary-contents` is set.
+- `workspace`: Docs/Sheets/Slides inventory plus Forms and form responses
+  discovered through Drive. Add `--workspace-native` to fetch full native
+  Docs/Sheets/Slides API JSON.
+- `appscript`: Apps Script projects and source content discovered through
+  Drive.
+- `chat`: Chat spaces and messages, when the authenticated account/API allows
+  access.
+- `classroom`: courses, topics, announcements, coursework, materials, and
+  submissions visible to the authenticated account.
 
 `all` expands to every supported service. Pushing a subset updates that subset
 and preserves existing shards for services that were not selected, as long as
 the age recipients are unchanged.
+
+`gog backup push` enables `--drive-contents` and `--best-effort` by default.
+Use `--no-drive-contents` for metadata-only Drive runs, or
+`--drive-content-max-bytes <bytes>` to skip individual large Drive downloads.
+Drive content exports Google-native files by default; set
+`--drive-binary-contents` only when you intentionally want non-Google binary
+file bytes in Git shards. Use `--workspace-native` only when you want the
+heavier native API JSON in addition to readable Drive exports;
+`--workspace-max-files` bounds that native fetch per file type for smoke tests.
+Best-effort optional services record encrypted `errors` shards and let the rest
+of the backup finish.
 
 ## Files
 
@@ -119,14 +144,17 @@ manifest.json
 gmail/<account-hash>/labels.json
 gmail/<account-hash>/messages/index.jsonl
 gmail/<account-hash>/messages/YYYY/MM/<timestamp>-<message-id>.eml
+drive/<account-hash>/files/index.jsonl
+drive/<account-hash>/files/<file-id>/<exported-file>
 raw/<service>/...
 ```
 
 `gog backup export` decrypts and verifies the manifest-backed shards before
 writing files. Gmail messages become `.eml` files that open in Mail and other
-mail clients. Other services are written as verified JSONL under `raw/`. The
-export is not encrypted; do not place it inside the backup Git repository, and
-keep it out of synced/shared folders unless that is intentional.
+mail clients. Drive content shards become normal files plus an index. Other
+services are written as verified JSONL under `raw/`. The export is not
+encrypted; do not place it inside the backup Git repository, and keep it out of
+synced/shared folders unless that is intentional.
 
 ## Encryption
 
@@ -213,13 +241,25 @@ friendly.
 `--include-spam-trash` defaults to true. Use `--query` and `--max` for bounded
 test exports; omit them for a full mailbox scan.
 
+The Gmail settings adapter backs up account configuration through read-only
+settings endpoints. Some settings, such as delegates, can be forbidden for
+consumer accounts; those errors are kept inside the encrypted settings shard.
+
 The Calendar adapter backs up calendar list entries and all events from each
 calendar. The Contacts adapter backs up contacts and other contacts. The Tasks
-adapter backs up task lists and tasks. The Drive adapter backs up shared drives
-and file metadata, including names, owners, parents, links, checksums, export
-links, and selected custom properties. Drive file contents are intentionally
-left for a later adapter pass because they need format choices, bandwidth
-limits, and resume/checkpoint behavior.
+adapter backs up task lists and tasks. The Drive adapter backs up shared drives,
+file metadata, and Google-native file exports by default. Content rows store
+base64 bytes inside encrypted JSONL so Git only sees ciphertext; plaintext
+export decodes them back into regular files. Non-Google binary Drive bytes are
+opt-in because personal Drives can easily contain tens of gigabytes.
+
+The Workspace adapter discovers Google Docs, Sheets, Slides, and Forms via
+Drive. Docs/Sheets/Slides are already recoverable through the Drive content
+exports; `--workspace-native` adds heavier native API JSON for machine-readable
+recovery. The Apps Script adapter discovers script projects through Drive and
+stores project metadata plus source content. Chat and Classroom adapters
+enumerate data visible to the authenticated account; personal/permission-limited
+accounts may produce encrypted error shards under `--best-effort`.
 
 ## Adding Services
 
