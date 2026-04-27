@@ -12,8 +12,6 @@ import (
 	"github.com/steipete/gogcli/internal/ui"
 )
 
-const driveFileListFields = "nextPageToken, files(id, name, mimeType, size, modifiedTime, parents, webViewLink, owners(emailAddress), driveId)"
-
 type driveFileListOptions struct {
 	query     string
 	max       int64

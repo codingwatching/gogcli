@@ -10,3 +10,9 @@ func TestDriveFileListFieldsIncludesDriveID(t *testing.T) {
 		t.Fatalf("driveFileListFields must include driveId; got %q", driveFileListFields)
 	}
 }
+
+func TestDriveFileGetFieldsIncludesDriveID(t *testing.T) {
+	if !strings.Contains(driveFileGetFields, "driveId") {
+		t.Fatalf("driveFileGetFields must include driveId; got %q", driveFileGetFields)
+	}
+}
