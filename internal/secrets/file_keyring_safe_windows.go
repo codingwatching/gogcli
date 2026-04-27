@@ -15,5 +15,6 @@ func defaultIsInvalidFileKeyError(err error) bool {
 	}
 
 	var errno syscall.Errno
+
 	return errors.As(pathErr.Err, &errno) && errno == syscall.Errno(0x7B)
 }
