@@ -13,13 +13,13 @@ Fast, script-friendly CLI for Gmail, Calendar, Chat, Classroom, Drive, Docs, Sli
 - **Calendar** - list/create/update/delete events, manage invitations, aliases, subscriptions, team calendars, free/busy/conflicts, propose new times, focus/OOO/working-location events, recurrence, and reminders
 - **Classroom** - manage courses, roster, coursework/materials, submissions, announcements, topics, invitations, guardians, profiles
 - **Chat** - list/find/create spaces, list messages/threads, send messages and DMs, and manage emoji reactions (Workspace-only)
-- **Drive** - list/search/upload/download files, replace uploads in-place, convert uploads (including Markdown to Google Doc), manage permissions/comments, organize folders, and list shared drives
+- **Drive** - list/search/upload/download files, scope search to folders or shared drives, replace uploads in-place, convert uploads (including Markdown to Google Doc), manage permissions/comments, organize folders, and list shared drives
 - **Contacts** - search/create/update contacts, including addresses, relations, org/title metadata, custom fields, Workspace directory, and other contacts
 - **Tasks** - manage tasklists and tasks: get/create/add/update/done/undo/delete/clear, plus repeat schedule materialization with RRULE aliases
 - **Sheets** - read/write/update spreadsheets, insert rows/cols, manage tabs and named ranges, format/merge/freeze/resize cells, read/write notes, inspect formats, find/replace text, list links, and create/export sheets
 - **Forms** - create/update forms, manage questions, inspect responses, and manage watches
 - **Apps Script** - create/get/bind projects, inspect content, and run functions
-- **Docs/Slides** - create/copy/export docs/slides, edit Docs by tab, import Markdown, do richer find-replace, export Docs as Markdown/HTML, and generate Slides from Markdown or templates
+- **Docs/Slides** - create/copy/export docs/slides, edit Docs by tab title or ID, import Markdown, do richer find-replace, export Docs as Markdown/HTML, and generate Slides from Markdown or templates
 - **People** - profile lookup and directory search helpers
 - **Keep (Workspace only)** - list/get/search/create/delete notes and download attachments (service account + domain-wide delegation)
 - **Admin (Workspace only)** - Workspace Admin users/groups commands for common directory operations
@@ -977,6 +977,8 @@ gog drive ls --all --max 20               # List across all accessible files (ca
 gog drive ls --no-all-drives            # Only list from "My Drive"
 gog drive search "invoice" --max 20
 gog drive search "invoice" --no-all-drives
+gog drive search "invoice" --parent <folderId>       # Direct children of one folder
+gog drive search "invoice" --drive <sharedDriveId>   # Search within one shared drive
 gog drive search "mimeType = 'application/pdf'" --raw-query
 gog drive get <fileId>                # Get file metadata
 gog drive url <fileId>                # Print Drive web URL
@@ -1032,14 +1034,14 @@ gog docs list-tabs <docId>
 gog docs cat <docId> --tab "Notes"
 gog docs cat <docId> --all-tabs
 gog docs update <docId> --text "Append this later"
-gog docs update <docId> --text "Only in this tab" --tab-id t.notes
+gog docs update <docId> --text "Only in this tab" --tab "Notes"
 gog docs update <docId> --file ./insert.txt --index 25 --pageless
 gog docs write <docId> --text "Fresh content"
-gog docs write <docId> --text "Rewrite one tab" --tab-id t.notes
+gog docs write <docId> --text "Rewrite one tab" --tab "Notes"
 gog docs write <docId> --file ./body.txt --append --pageless
 gog docs write <docId> --file ./body.md --replace --markdown
 gog docs find-replace <docId> "old" "new"
-gog docs find-replace <docId> "old" "new" --tab-id t.notes
+gog docs find-replace <docId> "old" "new" --tab "Notes"
 
 # Slides
 gog slides info <presentationId>
