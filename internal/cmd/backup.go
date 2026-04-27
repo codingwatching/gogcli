@@ -110,20 +110,21 @@ func (c *BackupInitCmd) Run(ctx context.Context) error {
 
 type BackupPushCmd struct {
 	backupFlags
-	Services             string `name:"services" help:"Comma-separated services to back up" default:"gmail"`
-	Query                string `name:"query" help:"Gmail query for bounded/test backups"`
-	Max                  int64  `name:"max" aliases:"limit" help:"Max Gmail messages to export; 0 means all" default:"0"`
-	IncludeSpamTrash     bool   `name:"include-spam-trash" help:"Include Gmail spam and trash" default:"true"`
-	ShardMaxRows         int    `name:"shard-max-rows" help:"Max rows per encrypted shard" default:"1000"`
-	DriveContents        bool   `name:"drive-contents" help:"Download/export Drive file contents into encrypted shards" default:"true" negatable:""`
-	DriveBinaryContents  bool   `name:"drive-binary-contents" help:"Include non-Google Drive binary file bytes in encrypted shards"`
-	DriveContentMaxBytes int64  `name:"drive-content-max-bytes" help:"Skip individual Drive content exports larger than this many bytes; 0 means unlimited" default:"0"`
-	DriveCollaboration   bool   `name:"drive-collaboration" help:"Back up Drive permissions, comments, and revision metadata" default:"true" negatable:""`
-	WorkspaceNative      bool   `name:"workspace-native" help:"Fetch full native Docs/Sheets/Slides API JSON in addition to Drive exports"`
-	WorkspaceMaxFiles    int    `name:"workspace-max-files" help:"Max Docs/Sheets/Slides files per type for native Workspace metadata; 0 means all" default:"0"`
-	GmailCache           bool   `name:"gmail-cache" help:"Cache fetched Gmail raw messages locally so interrupted full backups can resume" default:"true" negatable:""`
-	GmailRefreshCache    bool   `name:"gmail-refresh-cache" help:"Refetch Gmail messages even when a local backup cache entry exists"`
-	BestEffort           bool   `name:"best-effort" help:"Record optional service errors as backup rows and continue" default:"true" negatable:""`
+	Services             string        `name:"services" help:"Comma-separated services to back up" default:"gmail"`
+	Query                string        `name:"query" help:"Gmail query for bounded/test backups"`
+	Max                  int64         `name:"max" aliases:"limit" help:"Max Gmail messages to export; 0 means all" default:"0"`
+	IncludeSpamTrash     bool          `name:"include-spam-trash" help:"Include Gmail spam and trash" default:"true"`
+	ShardMaxRows         int           `name:"shard-max-rows" help:"Max rows per encrypted shard" default:"1000"`
+	DriveContents        bool          `name:"drive-contents" help:"Download/export Drive file contents into encrypted shards" default:"true" negatable:""`
+	DriveBinaryContents  bool          `name:"drive-binary-contents" help:"Include non-Google Drive binary file bytes in encrypted shards"`
+	DriveContentMaxBytes int64         `name:"drive-content-max-bytes" help:"Skip individual Drive content exports larger than this many bytes; 0 means unlimited" default:"0"`
+	DriveCollaboration   bool          `name:"drive-collaboration" help:"Back up Drive permissions, comments, and revision metadata" default:"true" negatable:""`
+	DriveContentTimeout  time.Duration `name:"drive-content-timeout" help:"Per-file Drive content export/download timeout" default:"2m"`
+	WorkspaceNative      bool          `name:"workspace-native" help:"Fetch full native Docs/Sheets/Slides API JSON in addition to Drive exports"`
+	WorkspaceMaxFiles    int           `name:"workspace-max-files" help:"Max Docs/Sheets/Slides files per type for native Workspace metadata; 0 means all" default:"0"`
+	GmailCache           bool          `name:"gmail-cache" help:"Cache fetched Gmail raw messages locally so interrupted full backups can resume" default:"true" negatable:""`
+	GmailRefreshCache    bool          `name:"gmail-refresh-cache" help:"Refetch Gmail messages even when a local backup cache entry exists"`
+	BestEffort           bool          `name:"best-effort" help:"Record optional service errors as backup rows and continue" default:"true" negatable:""`
 }
 
 func (c *BackupPushCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -177,6 +178,7 @@ func (c *BackupPushCmd) Run(ctx context.Context, flags *RootFlags) error {
 				IncludeBinary:   c.DriveBinaryContents,
 				MaxContentBytes: c.DriveContentMaxBytes,
 				IncludeCollab:   c.DriveCollaboration,
+				ContentTimeout:  c.DriveContentTimeout,
 			})
 			if err != nil {
 				return err

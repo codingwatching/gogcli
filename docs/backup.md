@@ -114,6 +114,9 @@ the age recipients are unchanged.
 metadata-only Drive runs, `--no-drive-collaboration` to skip per-file Drive
 permissions/comments/revisions, or
 `--drive-content-max-bytes <bytes>` to skip individual large Drive downloads.
+`--drive-content-timeout` bounds each individual Drive export/download; timed
+out files are represented as encrypted error rows so one stuck Google export
+does not wedge the whole run.
 Drive content exports Google-native files by default; set
 `--drive-binary-contents` only when you intentionally want non-Google binary
 file bytes in Git shards. Use `--workspace-native` only when you want the

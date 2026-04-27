@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"google.golang.org/api/drive/v3"
 	gapi "google.golang.org/api/googleapi"
@@ -21,6 +22,7 @@ type driveBackupOptions struct {
 	IncludeBinary   bool
 	MaxContentBytes int64
 	IncludeCollab   bool
+	ContentTimeout  time.Duration
 }
 
 func buildDriveBackupSnapshot(ctx context.Context, flags *RootFlags, opts driveBackupOptions) (backup.Snapshot, error) {

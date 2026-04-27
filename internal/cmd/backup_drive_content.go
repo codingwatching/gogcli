@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"google.golang.org/api/drive/v3"
 )
@@ -59,7 +60,7 @@ func fetchBackupDriveContents(ctx context.Context, svc *drive.Service, files []d
 				counts["drive.contents.skipped"]++
 				continue
 			}
-			content, err := downloadDriveBackupContent(ctx, svc, row.File, plan)
+			content, err := downloadDriveBackupContent(ctx, svc, row.File, plan, opts.ContentTimeout)
 			if err != nil {
 				out = append(out, driveContentErrorRow(row.File, plan, err.Error()))
 				counts["drive.contents.errors"]++
@@ -170,7 +171,12 @@ func safeDriveExportName(file *drive.File, ext string) string {
 	return sanitizeFilePart(name)
 }
 
-func downloadDriveBackupContent(ctx context.Context, svc *drive.Service, file *drive.File, plan driveBackupContentPlan) ([]byte, error) {
+func downloadDriveBackupContent(ctx context.Context, svc *drive.Service, file *drive.File, plan driveBackupContentPlan, timeout time.Duration) ([]byte, error) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 	if plan.Source == "export" {
 		httpResp, err := driveExportDownload(ctx, svc, file.Id, plan.MimeType)
 		if err != nil {

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -253,6 +254,22 @@ func TestDriveBackupContentPlansPreferReadableWorkspaceFormats(t *testing.T) {
 	binaryPlans = driveBackupContentPlans(&drive.File{Id: "bin1", Name: "Archive.zip", MimeType: "application/zip"}, true)
 	if len(binaryPlans) != 1 || binaryPlans[0].Source != "download" {
 		t.Fatalf("unexpected binary plans: %#v", binaryPlans)
+	}
+}
+
+func TestDownloadDriveBackupContentHonorsTimeout(t *testing.T) {
+	origExport := driveExportDownload
+	t.Cleanup(func() { driveExportDownload = origExport })
+	driveExportDownload = func(ctx context.Context, _ *drive.Service, _, _ string) (*http.Response, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	_, err := downloadDriveBackupContent(t.Context(), nil, &drive.File{Id: "doc1"}, driveBackupContentPlan{
+		MimeType: mimePDF,
+		Source:   "export",
+	}, time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "deadline exceeded") {
+		t.Fatalf("expected deadline exceeded, got %v", err)
 	}
 }
 

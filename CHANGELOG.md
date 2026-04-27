@@ -6,6 +6,7 @@
 - Backup: add `gog backup` with age-encrypted Git shards, Gmail labels/raw message export, Calendar/Contacts/Tasks/Drive metadata adapters, manifest status, full decrypt-and-verify, shard `cat`, local plaintext export, docs, and security-focused regression coverage.
 - Backup: expand `gog backup push --services all` with Drive content export/download, Gmail settings, native Workspace Docs/Sheets/Slides/Form data, Apps Script projects, Chat, Classroom, best-effort optional service error shards, and plaintext Drive file export.
 - Backup: extend `--services all` with Drive permissions/comments/revisions, Calendar ACL/settings/colors, contact groups, Cloud Identity groups, Workspace Admin Directory users/groups/members, Keep notes, and local Gmail message caching for resumable full-mailbox fetches.
+- Backup: bound individual Drive content exports with `--drive-content-timeout` so one stuck Google export records an encrypted error row instead of blocking the full backup.
 
 ### Fixed
 - Gmail: auto-fill draft reply subjects from the original message when `gmail drafts create --reply-to-message-id` omits `--subject`. (#488) — thanks @jbowerbir.
