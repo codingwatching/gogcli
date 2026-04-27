@@ -431,7 +431,7 @@ func fetchBackupContactGroups(ctx context.Context, svc *people.Service) ([]*peop
 	for {
 		call := svc.ContactGroups.List().
 			PageSize(1000).
-			GroupFields("clientData,formattedName,groupType,memberCount,metadata,name,resourceName").
+			GroupFields("clientData,groupType,memberCount,metadata,name").
 			Context(ctx)
 		if pageToken != "" {
 			call = call.PageToken(pageToken)
@@ -446,7 +446,7 @@ func fetchBackupContactGroups(ctx context.Context, svc *people.Service) ([]*peop
 		}
 		pageToken = resp.NextPageToken
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ResourceName < out[j].ResourceName })
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
