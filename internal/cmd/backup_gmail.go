@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -210,7 +211,7 @@ func fetchGmailBackupMessagesDirect(ctx context.Context, svc *gmail.Service, ids
 
 func ensureGmailBackupMessageCache(ctx context.Context, svc *gmail.Service, opts gmailBackupOptions, ids []string) error {
 	gmailBackupProgressf(ctx, "backup gmail fetch\tqueued=%d", len(ids))
-	const maxConcurrency = 8
+	const maxConcurrency = 2
 	sem := make(chan struct{}, maxConcurrency)
 	type result struct {
 		cache bool
@@ -291,6 +292,9 @@ func ensureGmailBackupMessageCache(ctx context.Context, svc *gmail.Service, opts
 		}
 		if done == len(ids) || done%100 == 0 {
 			gmailBackupProgressf(ctx, "backup gmail fetch\t%d/%d\tfetched=%d\tcache=%d", done, len(ids), fetched, cacheHits)
+		}
+		if done%1000 == 0 {
+			debug.FreeOSMemory()
 		}
 	}
 	if firstErr != nil {
