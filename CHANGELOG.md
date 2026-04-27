@@ -7,6 +7,7 @@
 - Backup: expand `gog backup push --services all` with Drive content export/download, Gmail settings, native Workspace Docs/Sheets/Slides/Form data, Apps Script projects, Chat, Classroom, best-effort optional service error shards, and plaintext Drive file export.
 
 ### Fixed
+- Secrets: time out macOS Keychain read/write/list operations with a clear recovery hint instead of hanging indefinitely when a permission prompt cannot surface. (#515, #513) — thanks @sardoru.
 - Secrets: encode file-backend key names so stored tokens work on Windows, while still reading/removing legacy raw entries. (#527, #502) — thanks @solomonneas.
 - Drive: include `driveId` in `drive ls`, `drive search`, and `drive get` field masks so Shared Drive files can be identified in JSON output. (#524) — thanks @LeanSheng.
 - Gmail: expose reply threading headers in default `gmail get --format metadata` output and fail explicit reply targets that cannot provide a `Message-ID`. (#528, #512) — thanks @solomonneas.

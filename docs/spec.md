@@ -93,6 +93,7 @@ Implementation: `internal/config/*`.
 - Key format: `token:<client>:<email>` (default client uses `token:default:<email>`)
 - Legacy key format: `token:<email>` (migrated on first read)
 - Stored payload is JSON (refresh token + metadata like selected services/scopes).
+- macOS Keychain operations are bounded by a timeout so non-surfacing permission prompts return actionable guidance instead of hanging indefinitely.
 - Fallback: if no OS credential store is available, keyring may use its encrypted "file" backend:
   - Directory: `$(os.UserConfigDir())/gogcli/keyring/` (one file per key; gog-managed key names are encoded for portable filenames)
   - Password: prompts on TTY; for non-interactive runs set `GOG_KEYRING_PASSWORD`

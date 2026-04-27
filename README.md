@@ -258,6 +258,8 @@ Backends:
 - `keychain`: macOS Keychain (recommended on macOS; avoids password management).
 - `file`: encrypted on-disk keyring (requires a password).
 
+On macOS, Keychain operations time out with a recovery hint if a permission prompt cannot surface; run the command from Terminal and choose "Always Allow", or switch to the file backend for headless runs.
+
 Set backend via command (writes `keyring_backend` into `config.json`):
 
 ```bash

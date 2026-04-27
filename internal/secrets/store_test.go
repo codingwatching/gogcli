@@ -173,6 +173,14 @@ func TestKeyringDbusGuards(t *testing.T) {
 			wantTimeout: false,
 		},
 		{
+			name:        "darwin auto no open timeout",
+			goos:        "darwin",
+			backend:     "auto",
+			dbusAddr:    "",
+			wantForce:   false,
+			wantTimeout: false,
+		},
+		{
 			name:        "linux explicit file no dbus",
 			goos:        "linux",
 			backend:     "file",

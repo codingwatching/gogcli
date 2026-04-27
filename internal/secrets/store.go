@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -156,7 +157,7 @@ func keyringServiceName() string {
 // keyringOpenTimeout is the maximum time to wait for keyring.Open() to complete.
 // On headless Linux, D-Bus SecretService can hang indefinitely if gnome-keyring
 // is installed but not running.
-const keyringOpenTimeout = 5 * time.Second
+const keyringOpenTimeout = 10 * time.Second
 
 func shouldForceFileBackend(goos string, backendInfo KeyringBackendInfo, dbusAddr string) bool {
 	return goos == "linux" && backendInfo.Value == keyringBackendAuto && dbusAddr == ""
@@ -164,6 +165,29 @@ func shouldForceFileBackend(goos string, backendInfo KeyringBackendInfo, dbusAdd
 
 func shouldUseKeyringTimeout(goos string, backendInfo KeyringBackendInfo, dbusAddr string) bool {
 	return goos == "linux" && backendInfo.Value == "auto" && dbusAddr != ""
+}
+
+func shouldUseKeyringOperationTimeout(goos string, backendInfo KeyringBackendInfo) bool {
+	return goos == "darwin" && (backendInfo.Value == keyringBackendAuto || backendInfo.Value == "keychain")
+}
+
+func keyringTimeoutHint(goos string) string {
+	switch goos {
+	case "darwin":
+		return "macOS Keychain may be waiting for a permission prompt; run `gog auth list` from a terminal and click \"Always Allow\" when prompted"
+	case "linux":
+		return "D-Bus SecretService may be unresponsive"
+	default:
+		return "keyring backend may be unresponsive"
+	}
+}
+
+func isFileKeyring(ring keyring.Keyring) bool {
+	if ring == nil {
+		return false
+	}
+
+	return reflect.TypeOf(ring).String() == "*keyring.fileKeyring"
 }
 
 func openKeyring() (keyring.Keyring, error) {
@@ -217,10 +241,7 @@ func openKeyring() (keyring.Keyring, error) {
 		if err != nil {
 			return nil, err
 		}
-		if wrapFileKeys {
-			return newFileSafeKeyring(ring), nil
-		}
-		return ring, nil
+		return prepareKeyring(ring, backendInfo, wrapFileKeys), nil
 	}
 
 	ring, err := keyringOpenFunc(cfg)
@@ -228,11 +249,18 @@ func openKeyring() (keyring.Keyring, error) {
 		return nil, fmt.Errorf("open keyring: %w", err)
 	}
 
-	if wrapFileKeys {
-		return newFileSafeKeyring(ring), nil
+	return prepareKeyring(ring, backendInfo, wrapFileKeys), nil
+}
+
+func prepareKeyring(ring keyring.Keyring, backendInfo KeyringBackendInfo, wrapFileKeys bool) keyring.Keyring {
+	if wrapFileKeys || isFileKeyring(ring) {
+		ring = newFileSafeKeyring(ring)
+	}
+	if shouldUseKeyringOperationTimeout(runtime.GOOS, backendInfo) {
+		ring = newTimeoutKeyring(ring, keyringOpenTimeout, keyringTimeoutHint(runtime.GOOS))
 	}
 
-	return ring, nil
+	return ring
 }
 
 type keyringResult struct {
@@ -263,9 +291,7 @@ func openKeyringWithTimeout(cfg keyring.Config, timeout time.Duration) (keyring.
 
 		return res.ring, nil
 	case <-time.After(timeout):
-		return nil, fmt.Errorf("%w after %v (D-Bus SecretService may be unresponsive); "+
-			"set GOG_KEYRING_BACKEND=file and GOG_KEYRING_PASSWORD=<password> to use encrypted file storage instead",
-			errKeyringTimeout, timeout)
+		return nil, keyringTimeoutError("opening keyring", timeout, keyringTimeoutHint(runtime.GOOS))
 	}
 }
 
