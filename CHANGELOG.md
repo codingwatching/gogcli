@@ -18,6 +18,7 @@
 - Contacts: add `contacts export` for vCard 4.0 `.vcf` exports by resource, email/name search, or all contacts, including best-effort label categories. (#519, #500) — thanks @dinakars777.
 - Contacts: include birthdays in `contacts list` and `contacts search` text and JSON output. (#441)
 - Auth: add `gog auth doctor` to diagnose keyring backend/password drift, unreadable file-keyring tokens, and refresh-token failures such as Workspace `invalid_rapt`. (#377, #338)
+- Google API: expose a reusable authenticated HTTP client for commands that need custom HTTP policies. (#534) — thanks @johnbenjaminlewis.
 
 ### Fixed
 - Backup: split Gmail checkpoint commits by row count and plaintext byte size so large messages stay below GitHub's blob limit.

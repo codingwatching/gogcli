@@ -661,3 +661,33 @@ func TestOptionsForAccountScopes_NoClientTimeout(t *testing.T) {
 		t.Fatalf("expected ResponseHeaderTimeout to be set on transport")
 	}
 }
+
+func TestNewHTTPClient_NoRedirectPolicy(t *testing.T) {
+	origRead := readClientCredentials
+	origOpen := openSecretsStore
+
+	t.Cleanup(func() {
+		readClientCredentials = origRead
+		openSecretsStore = origOpen
+	})
+
+	readClientCredentials = func(string) (config.ClientCredentials, error) {
+		return config.ClientCredentials{ClientID: "id", ClientSecret: "secret"}, nil
+	}
+	openSecretsStore = func() (secrets.Store, error) {
+		return &stubStore{tok: secrets.Token{Email: "a@b.com", RefreshToken: "rt"}}, nil
+	}
+
+	client, err := NewHTTPClient(context.Background(), googleauth.ServiceDocs, "a@b.com")
+	if err != nil {
+		t.Fatalf("NewHTTPClient: %v", err)
+	}
+
+	if client.Transport == nil {
+		t.Fatal("expected Transport to be set on client")
+	}
+
+	if client.CheckRedirect != nil {
+		t.Fatal("expected no CheckRedirect on bare client")
+	}
+}
