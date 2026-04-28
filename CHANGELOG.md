@@ -26,6 +26,7 @@
 - Backup: split Gmail checkpoint commits by row count and plaintext byte size so large messages stay below GitHub's blob limit.
 - Auth: time out Linux D-Bus keyring write operations and report when OAuth completed but saving the refresh token failed, so manual auth no longer looks like a stuck paste when token persistence is blocked. (#130)
 - Install docs: document Windows release ZIP/PATH setup and clarify that source builds require the Go version declared in `go.mod`, not Ubuntu 24.04's Go 1.22 package. (#157, #135)
+- CI: pin GitHub Actions workflow dependencies to immutable commit SHAs. (#288)
 - Auth: store Google OIDC `sub` claims with OAuth tokens and migrate matching subject-keyed accounts when a Google email rename is reauthorized. (#504)
 - Calendar: display `calendar events` times and JSON local fields in the calendar timezone instead of preserving arbitrary event offsets. (#493)
 - Drive/Docs/Sheets/Slides: treat `--out -` as stdout for downloads and exports instead of creating `-`/`-.ext` files; reject `--json --out -` to keep byte streams parseable. (#286)
