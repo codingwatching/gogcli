@@ -124,6 +124,9 @@ type BackupPushCmd struct {
 	WorkspaceMaxFiles    int           `name:"workspace-max-files" help:"Max Docs/Sheets/Slides files per type for native Workspace metadata; 0 means all" default:"0"`
 	GmailCache           bool          `name:"gmail-cache" help:"Cache fetched Gmail raw messages locally so interrupted full backups can resume" default:"true" negatable:""`
 	GmailRefreshCache    bool          `name:"gmail-refresh-cache" help:"Refetch Gmail messages even when a local backup cache entry exists"`
+	GmailCheckpoints     bool          `name:"gmail-checkpoints" help:"Commit and push incomplete encrypted Gmail checkpoints during long cached fetches" default:"true" negatable:""`
+	GmailCheckpointRows  int           `name:"gmail-checkpoint-rows" help:"Gmail messages per encrypted checkpoint chunk; 0 disables row-triggered checkpoints" default:"10000"`
+	GmailCheckpointEvery time.Duration `name:"gmail-checkpoint-interval" help:"Max time between Gmail checkpoint pushes during fetch; 0 disables time-triggered checkpoints" default:"30m"`
 	BestEffort           bool          `name:"best-effort" help:"Record optional service errors as backup rows and continue" default:"true" negatable:""`
 }
 
@@ -192,6 +195,10 @@ func (c *BackupPushCmd) Run(ctx context.Context, flags *RootFlags) error {
 				ShardMaxRows:     c.ShardMaxRows,
 				CacheMessages:    c.GmailCache,
 				RefreshCache:     c.GmailRefreshCache,
+				Checkpoints:      c.GmailCheckpoints,
+				CheckpointRows:   c.GmailCheckpointRows,
+				CheckpointEvery:  c.GmailCheckpointEvery,
+				BackupOptions:    c.options(),
 			})
 			if err != nil {
 				return err
@@ -270,12 +277,15 @@ func (c *BackupPushCmd) buildOptionalSnapshot(flags *RootFlags, service string, 
 
 type BackupGmailPushCmd struct {
 	backupFlags
-	Query            string `name:"query" help:"Gmail query for bounded/test backups"`
-	Max              int64  `name:"max" aliases:"limit" help:"Max Gmail messages to export; 0 means all" default:"0"`
-	IncludeSpamTrash bool   `name:"include-spam-trash" help:"Include spam and trash" default:"true"`
-	ShardMaxRows     int    `name:"shard-max-rows" help:"Max messages per encrypted shard" default:"1000"`
-	CacheMessages    bool   `name:"gmail-cache" help:"Cache fetched raw messages locally so interrupted full backups can resume" default:"true" negatable:""`
-	RefreshCache     bool   `name:"gmail-refresh-cache" help:"Refetch messages even when a local backup cache entry exists"`
+	Query            string        `name:"query" help:"Gmail query for bounded/test backups"`
+	Max              int64         `name:"max" aliases:"limit" help:"Max Gmail messages to export; 0 means all" default:"0"`
+	IncludeSpamTrash bool          `name:"include-spam-trash" help:"Include spam and trash" default:"true"`
+	ShardMaxRows     int           `name:"shard-max-rows" help:"Max messages per encrypted shard" default:"1000"`
+	CacheMessages    bool          `name:"gmail-cache" help:"Cache fetched raw messages locally so interrupted full backups can resume" default:"true" negatable:""`
+	RefreshCache     bool          `name:"gmail-refresh-cache" help:"Refetch messages even when a local backup cache entry exists"`
+	Checkpoints      bool          `name:"checkpoints" help:"Commit and push incomplete encrypted checkpoints during long cached fetches" default:"true" negatable:""`
+	CheckpointRows   int           `name:"checkpoint-rows" help:"Gmail messages per encrypted checkpoint chunk; 0 disables row-triggered checkpoints" default:"10000"`
+	CheckpointEvery  time.Duration `name:"checkpoint-interval" help:"Max time between checkpoint pushes during fetch; 0 disables time-triggered checkpoints" default:"30m"`
 }
 
 func (c *BackupGmailPushCmd) Run(ctx context.Context, flags *RootFlags) error {
@@ -286,6 +296,10 @@ func (c *BackupGmailPushCmd) Run(ctx context.Context, flags *RootFlags) error {
 		ShardMaxRows:     c.ShardMaxRows,
 		CacheMessages:    c.CacheMessages,
 		RefreshCache:     c.RefreshCache,
+		Checkpoints:      c.Checkpoints,
+		CheckpointRows:   c.CheckpointRows,
+		CheckpointEvery:  c.CheckpointEvery,
+		BackupOptions:    c.options(),
 	})
 	if err != nil {
 		return err

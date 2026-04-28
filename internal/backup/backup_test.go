@@ -92,6 +92,55 @@ func TestPushSnapshotEncryptsAndCleansPlaintextPath(t *testing.T) {
 	}
 }
 
+func TestPushCheckpointWritesIncompleteManifestOutsideMainSnapshot(t *testing.T) {
+	ctx, repo, config, _ := initTestBackup(t)
+	shard, err := NewJSONLShard("gmail", "messages", "acct", "checkpoints/gmail/acct/run-one/messages/part-000001.jsonl.gz.age", []map[string]string{
+		{"id": "m1", "raw": "private checkpoint body"},
+	})
+	if err != nil {
+		t.Fatalf("NewJSONLShard: %v", err)
+	}
+	result, err := PushCheckpoint(ctx, Snapshot{
+		Services: []string{"gmail"},
+		Accounts: []string{"acct"},
+		Counts:   map[string]int{"gmail.messages": 1},
+		Shards:   []PlainShard{shard},
+	}, Checkpoint{
+		RunID:     "run-one",
+		Service:   "gmail",
+		Account:   "acct",
+		Done:      1,
+		Total:     2,
+		Fetched:   1,
+		CacheHits: 0,
+	}, Options{ConfigPath: config, Push: false})
+	if err != nil {
+		t.Fatalf("PushCheckpoint: %v", err)
+	}
+	if !result.Changed || result.Shards != 1 || result.Counts["gmail.messages"] != 1 {
+		t.Fatalf("unexpected checkpoint result: %+v", result)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, "manifest.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("main manifest should not be created by checkpoint: %v", statErr)
+	}
+	manifest, err := readCheckpointManifest(repo, "checkpoints/gmail/acct/run-one/manifest.json")
+	if err != nil {
+		t.Fatalf("readCheckpointManifest: %v", err)
+	}
+	if !manifest.Incomplete || manifest.Done != 1 || manifest.Total != 2 || manifest.RunID != "run-one" {
+		t.Fatalf("unexpected checkpoint manifest: %+v", manifest)
+	}
+	ciphertext := readFile(t, filepath.Join(repo, "checkpoints", "gmail", "acct", "run-one", "messages", "part-000001.jsonl.gz.age"))
+	if strings.Contains(string(ciphertext), "private checkpoint body") {
+		t.Fatal("checkpoint shard contains plaintext")
+	}
+
+	pushSingleShard(t, ctx, config, mustGmailMessageShard(t, "data/gmail/acct/messages/2026/04/part-0001.jsonl.gz.age", []map[string]string{{"id": "m1", "raw": "final"}}))
+	if _, err := os.Stat(filepath.Join(repo, "checkpoints", "gmail", "acct", "run-one", "messages", "part-000001.jsonl.gz.age")); err != nil {
+		t.Fatalf("final snapshot removed checkpoint shard: %v", err)
+	}
+}
+
 func TestCatAndDecryptSnapshotVerifyPlaintext(t *testing.T) {
 	ctx, repo, config, _ := initTestBackup(t)
 	shardPath := "data/gmail/acct/messages/2026/04/part-0001.jsonl.gz.age"

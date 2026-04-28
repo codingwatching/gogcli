@@ -73,8 +73,9 @@ Supported services:
 
 - `gmail`: labels and raw MIME messages. Fetched raw messages are cached under
   the local user cache by default so interrupted full-mailbox runs can resume
-  the expensive message download phase; use `--no-gmail-cache` or
-  `--gmail-refresh-cache` to bypass it.
+  the expensive message download phase. Cached runs also write encrypted
+  incomplete checkpoint commits during long fetches; use `--no-gmail-cache`,
+  `--gmail-refresh-cache`, or `--no-gmail-checkpoints` to bypass those layers.
 - `gmail-settings`: filters, forwarding addresses, auto-forwarding, send-as
   aliases, vacation responder, delegate visibility, POP, IMAP, and language
   settings.
@@ -270,6 +271,22 @@ every raw message in RAM. Long Gmail runs report list, fetch, and shard-build
 counters to stderr while stdout stays parseable. `--gmail-refresh-cache` forces
 a refetch. The cache is plaintext local data; clear it if the machine should not
 retain local mail copies outside the encrypted backup/export locations.
+
+Cached Gmail runs also push incomplete encrypted checkpoint snapshots to the
+backup Git repo. Checkpoint shards and manifests live under
+`checkpoints/gmail/<account-hash>/<run-id>/`, are encrypted with the same age
+recipients as normal backup shards, and are committed with messages like
+`checkpoint: gmail backup 20000/359635`. The checkpoint manifest has
+`"incomplete": true`; `gog backup status`, `verify`, `cat`, and `export` continue
+to use the root `manifest.json` as the authoritative completed backup. This
+keeps long runs crash-tolerant without pretending partial data is a finished
+snapshot. A checkpoint commit can cover many messages, but its encrypted files
+are split into smaller shard files to stay below normal GitHub blob limits. Tune
+the commit cadence with `--gmail-checkpoint-rows` / `--gmail-checkpoint-interval`
+on `gog backup push`, or `--checkpoint-rows` / `--checkpoint-interval` on
+`gog backup gmail push`; set the interval or rows to `0` to disable that
+trigger, or use `--no-gmail-checkpoints` / `--no-checkpoints` to disable
+checkpoint pushes entirely.
 
 `--include-spam-trash` defaults to true. Use `--query` and `--max` for bounded
 test exports; omit them for a full mailbox scan.

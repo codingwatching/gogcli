@@ -329,6 +329,131 @@ func TestEnsureGmailBackupMessageCacheStopsOnFirstFetchError(t *testing.T) {
 	}
 }
 
+func TestEnsureGmailBackupMessageCacheWritesEncryptedCheckpoints(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	identity := filepath.Join(dir, "age.key")
+	config := filepath.Join(dir, "backup.json")
+	recipient, err := backup.EnsureIdentity(identity)
+	if err != nil {
+		t.Fatalf("EnsureIdentity: %v", err)
+	}
+	if saveErr := backup.SaveConfig(config, backup.Config{
+		Repo:       repo,
+		Identity:   identity,
+		Recipients: []string{recipient},
+	}); saveErr != nil {
+		t.Fatalf("SaveConfig: %v", saveErr)
+	}
+	svc, cleanup := newGmailServiceForTest(t, func(w http.ResponseWriter, r *http.Request) {
+		id := filepath.Base(r.URL.Path)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":           id,
+			"threadId":     "thread-" + id,
+			"historyId":    "100",
+			"internalDate": fmt.Sprint(mustUnixMilli(t, "2026-04-02T10:00:00Z")),
+			"labelIds":     []string{"INBOX"},
+			"sizeEstimate": 42,
+			"raw":          base64.RawURLEncoding.EncodeToString([]byte("Subject: " + id + "\r\n\r\nBody")),
+		})
+	})
+	defer cleanup()
+
+	ids := []string{"m1", "m2", "m3", "m4", "m5"}
+	err = ensureGmailBackupMessageCache(context.Background(), svc, gmailBackupOptions{
+		AccountHash:      "accthash",
+		CacheMessages:    true,
+		IncludeSpamTrash: true,
+		Checkpoints:      true,
+		CheckpointRows:   2,
+		CheckpointRunID:  "run-test",
+		BackupOptions:    backup.Options{ConfigPath: config, Push: false},
+	}, ids)
+	if err != nil {
+		t.Fatalf("ensureGmailBackupMessageCache: %v", err)
+	}
+	manifestPath := filepath.Join(repo, "checkpoints", "gmail", "accthash", "run-test", "manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read checkpoint manifest: %v", err)
+	}
+	var manifest backup.CheckpointManifest
+	if unmarshalErr := json.Unmarshal(data, &manifest); unmarshalErr != nil {
+		t.Fatalf("unmarshal checkpoint manifest: %v", unmarshalErr)
+	}
+	if !manifest.Incomplete || manifest.Done != 5 || manifest.Total != 5 || len(manifest.Shards) != 3 {
+		t.Fatalf("unexpected checkpoint manifest: %+v", manifest)
+	}
+	ciphertext, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(manifest.Shards[0].Path)))
+	if err != nil {
+		t.Fatalf("read checkpoint shard: %v", err)
+	}
+	if strings.Contains(string(ciphertext), "Subject:") {
+		t.Fatal("checkpoint shard contains plaintext")
+	}
+}
+
+func TestBuildGmailCheckpointShardFromCacheWritesPlaintextPath(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	accountHash := "accthash"
+	for _, message := range []gmailBackupMessage{
+		{ID: "m1", InternalDate: mustUnixMilli(t, "2026-04-01T10:00:00Z"), Raw: "raw-1"},
+		{ID: "m2", InternalDate: mustUnixMilli(t, "2026-04-02T10:00:00Z"), Raw: "raw-2"},
+	} {
+		if err := writeGmailBackupMessageCache(accountHash, message); err != nil {
+			t.Fatalf("writeGmailBackupMessageCache: %v", err)
+		}
+	}
+	shard, err := buildGmailCheckpointShardFromCache(accountHash, "run-test", 3, []string{"m1", "m2"})
+	if err != nil {
+		t.Fatalf("buildGmailCheckpointShardFromCache: %v", err)
+	}
+	if shard.Path != "checkpoints/gmail/accthash/run-test/messages/part-000003.jsonl.gz.age" {
+		t.Fatalf("checkpoint shard path = %q", shard.Path)
+	}
+	if shard.Rows != 2 || shard.PlaintextPath == "" {
+		t.Fatalf("unexpected shard: %+v", shard)
+	}
+	data, err := os.ReadFile(shard.PlaintextPath)
+	if err != nil {
+		t.Fatalf("read checkpoint plaintext: %v", err)
+	}
+	var rows []gmailBackupMessage
+	if err := backup.DecodeJSONL(data, &rows); err != nil {
+		t.Fatalf("DecodeJSONL: %v", err)
+	}
+	if len(rows) != 2 || rows[0].ID != "m1" || rows[1].ID != "m2" {
+		t.Fatalf("rows = %+v", rows)
+	}
+}
+
+func TestBuildGmailCheckpointShardsFromCacheSplitsLargeChunks(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	accountHash := "accthash"
+	ids := make([]string, gmailCheckpointShardMaxRows+1)
+	for i := range ids {
+		id := fmt.Sprintf("m-%04d", i)
+		ids[i] = id
+		if err := writeGmailBackupMessageCache(accountHash, gmailBackupMessage{ID: id, Raw: "raw-" + id}); err != nil {
+			t.Fatalf("writeGmailBackupMessageCache: %v", err)
+		}
+	}
+	shards, err := buildGmailCheckpointShardsFromCache(accountHash, "run-test", 7, ids)
+	if err != nil {
+		t.Fatalf("buildGmailCheckpointShardsFromCache: %v", err)
+	}
+	if len(shards) != 2 {
+		t.Fatalf("len(shards) = %d, want 2", len(shards))
+	}
+	if shards[0].Rows != gmailCheckpointShardMaxRows || shards[1].Rows != 1 {
+		t.Fatalf("rows = %d,%d", shards[0].Rows, shards[1].Rows)
+	}
+	if !strings.HasSuffix(shards[0].Path, "part-000007.jsonl.gz.age") || !strings.HasSuffix(shards[1].Path, "part-000008.jsonl.gz.age") {
+		t.Fatalf("paths = %q %q", shards[0].Path, shards[1].Path)
+	}
+}
+
 func TestBuildGmailMessageShardsFromCacheWritesPlaintextPaths(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	accountHash := "accthash"

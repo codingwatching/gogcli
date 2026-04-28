@@ -33,6 +33,33 @@ type Manifest struct {
 	Shards     []ShardEntry   `json:"shards"`
 }
 
+type Checkpoint struct {
+	RunID     string
+	Service   string
+	Account   string
+	Done      int
+	Total     int
+	Fetched   int
+	CacheHits int
+}
+
+type CheckpointManifest struct {
+	Format     int          `json:"format"`
+	App        string       `json:"app"`
+	Encrypted  bool         `json:"encrypted"`
+	Incomplete bool         `json:"incomplete"`
+	Exported   time.Time    `json:"exported"`
+	Recipients []string     `json:"recipients,omitempty"`
+	RunID      string       `json:"run_id"`
+	Service    string       `json:"service"`
+	Account    string       `json:"account,omitempty"`
+	Done       int          `json:"done"`
+	Total      int          `json:"total"`
+	Fetched    int          `json:"fetched,omitempty"`
+	CacheHits  int          `json:"cache_hits,omitempty"`
+	Shards     []ShardEntry `json:"shards"`
+}
+
 type ShardEntry struct {
 	Service string `json:"service"`
 	Kind    string `json:"kind"`
@@ -124,6 +151,44 @@ func PushSnapshot(ctx context.Context, snapshot Snapshot, opts Options) (Result,
 	return Result{Repo: cfg.Repo, Changed: changed, Encrypted: true, Shards: len(manifest.Shards), Counts: manifest.Counts}, nil
 }
 
+func PushCheckpoint(ctx context.Context, snapshot Snapshot, checkpoint Checkpoint, opts Options) (Result, error) {
+	defer cleanupPlainShardFiles(snapshot)
+	cfg, err := ResolveOptions(opts)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(cfg.Recipients) == 0 {
+		recipient, err := RecipientFromIdentity(cfg.Identity)
+		if err != nil {
+			return Result{}, err
+		}
+		cfg.Recipients = []string{recipient}
+	}
+	if err := ensureRepo(ctx, cfg); err != nil {
+		return Result{}, err
+	}
+	if err := writeBackupReadme(cfg.Repo); err != nil {
+		return Result{}, err
+	}
+	manifest, err := writeCheckpoint(ctx, cfg, snapshot, checkpoint)
+	if err != nil {
+		return Result{}, err
+	}
+	changed, err := commitAndPush(ctx, cfg, fmt.Sprintf("checkpoint: %s backup %d/%d", manifest.Service, manifest.Done, manifest.Total), opts.Push)
+	if err != nil {
+		return Result{}, err
+	}
+	counts := map[string]int{}
+	for _, shard := range manifest.Shards {
+		key := shard.Service
+		if shard.Kind != "" {
+			key += "." + shard.Kind
+		}
+		counts[key] += shard.Rows
+	}
+	return Result{Repo: cfg.Repo, Changed: changed, Encrypted: true, Shards: len(manifest.Shards), Counts: counts}, nil
+}
+
 func Verify(ctx context.Context, opts Options) (Result, error) {
 	cfg, err := ResolveOptions(opts)
 	if err != nil {
@@ -197,6 +262,70 @@ func NewJSONLShard(service, kind, account, rel string, rows any) (PlainShard, er
 		Rows:      count,
 		Plaintext: plaintext,
 	}, nil
+}
+
+func writeCheckpoint(ctx context.Context, cfg Config, snapshot Snapshot, checkpoint Checkpoint) (CheckpointManifest, error) {
+	checkpoint.Service = safePathPart(checkpoint.Service)
+	checkpoint.Account = safePathPart(checkpoint.Account)
+	checkpoint.RunID = safePathPart(checkpoint.RunID)
+	if checkpoint.Service == "" || checkpoint.RunID == "" {
+		return CheckpointManifest{}, fmt.Errorf("backup checkpoint service and run id are required")
+	}
+	dir := path.Join("checkpoints", checkpoint.Service, checkpoint.Account, checkpoint.RunID)
+	manifestRel := path.Join(dir, "manifest.json")
+	old, _ := readCheckpointManifest(cfg.Repo, manifestRel)
+	recipients := normalizedStrings(cfg.Recipients)
+	reuseEncrypted := sameStrings(old.Recipients, recipients)
+	replace := map[string]struct{}{}
+	for _, shard := range snapshot.Shards {
+		clean := path.Clean(strings.TrimSpace(shard.Path))
+		if !strings.HasPrefix(clean, dir+"/") {
+			return CheckpointManifest{}, fmt.Errorf("backup checkpoint shard path %q is outside %s", shard.Path, dir)
+		}
+		replace[clean] = struct{}{}
+	}
+	shards := make([]ShardEntry, 0, len(old.Shards)+len(snapshot.Shards))
+	if reuseEncrypted {
+		for _, shard := range old.Shards {
+			if _, ok := replace[shard.Path]; !ok {
+				shards = append(shards, shard)
+			}
+		}
+	}
+	oldManifest := Manifest{Recipients: old.Recipients, Shards: old.Shards}
+	for _, shard := range snapshot.Shards {
+		select {
+		case <-ctx.Done():
+			return CheckpointManifest{}, ctx.Err()
+		default:
+		}
+		entry, err := writeShard(cfg, oldManifest, shard, reuseEncrypted)
+		if err != nil {
+			return CheckpointManifest{}, err
+		}
+		shards = append(shards, entry)
+	}
+	sort.Slice(shards, func(i, j int) bool { return shards[i].Path < shards[j].Path })
+	manifest := CheckpointManifest{
+		Format:     formatVersion,
+		App:        "gog",
+		Encrypted:  true,
+		Incomplete: true,
+		Exported:   time.Now().UTC(),
+		Recipients: recipients,
+		RunID:      checkpoint.RunID,
+		Service:    checkpoint.Service,
+		Account:    checkpoint.Account,
+		Done:       checkpoint.Done,
+		Total:      checkpoint.Total,
+		Fetched:    checkpoint.Fetched,
+		CacheHits:  checkpoint.CacheHits,
+		Shards:     shards,
+	}
+	if err := writeCheckpointManifest(cfg.Repo, manifestRel, manifest); err != nil {
+		return CheckpointManifest{}, err
+	}
+	return manifest, nil
 }
 
 func writeSnapshot(ctx context.Context, cfg Config, snapshot Snapshot, old Manifest) (Manifest, error) {
@@ -389,11 +518,15 @@ func resolveShardPath(repo, rel string) (string, error) {
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
 		return "", fmt.Errorf("backup shard path escapes backup root: %s", rel)
 	}
-	if !strings.HasPrefix(clean, "data/") || !strings.HasSuffix(clean, ".age") {
+	if (!strings.HasPrefix(clean, "data/") && !strings.HasPrefix(clean, "checkpoints/")) || !strings.HasSuffix(clean, ".age") {
 		return "", fmt.Errorf("invalid backup shard path: %s", rel)
 	}
 	full := filepath.Join(repo, filepath.FromSlash(clean))
-	root := filepath.Clean(filepath.Join(repo, "data"))
+	rootName := "data"
+	if strings.HasPrefix(clean, "checkpoints/") {
+		rootName = "checkpoints"
+	}
+	root := filepath.Clean(filepath.Join(repo, rootName))
 	parent := filepath.Clean(filepath.Dir(full))
 	if parent != root && !strings.HasPrefix(parent, root+string(filepath.Separator)) {
 		return "", fmt.Errorf("backup shard path escapes backup root: %s", rel)
@@ -451,6 +584,55 @@ func readManifest(repo string) (Manifest, error) {
 		return Manifest{}, err
 	}
 	return manifest, nil
+}
+
+func readCheckpointManifest(repo, rel string) (CheckpointManifest, error) {
+	full, err := resolveCheckpointManifestPath(repo, rel)
+	if err != nil {
+		return CheckpointManifest{}, err
+	}
+	data, err := os.ReadFile(full) // #nosec G304 -- checkpoint manifest path is confined below checkpoints/.
+	if err != nil {
+		return CheckpointManifest{}, err
+	}
+	var manifest CheckpointManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return CheckpointManifest{}, err
+	}
+	return manifest, nil
+}
+
+func writeCheckpointManifest(repo, rel string, manifest CheckpointManifest) error {
+	full, err := resolveCheckpointManifestPath(repo, rel)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(full, data, 0o600)
+}
+
+func resolveCheckpointManifestPath(repo, rel string) (string, error) {
+	clean := path.Clean(strings.TrimSpace(rel))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
+		return "", fmt.Errorf("backup checkpoint path escapes backup root: %s", rel)
+	}
+	if !strings.HasPrefix(clean, "checkpoints/") || !strings.HasSuffix(clean, "/manifest.json") {
+		return "", fmt.Errorf("invalid backup checkpoint path: %s", rel)
+	}
+	full := filepath.Join(repo, filepath.FromSlash(clean))
+	root := filepath.Clean(filepath.Join(repo, "checkpoints"))
+	parent := filepath.Clean(filepath.Dir(full))
+	if parent != root && !strings.HasPrefix(parent, root+string(filepath.Separator)) {
+		return "", fmt.Errorf("backup checkpoint path escapes backup root: %s", rel)
+	}
+	return full, nil
 }
 
 func writeManifest(repo string, manifest Manifest) error {
@@ -521,6 +703,24 @@ func sameStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func safePathPart(value string) string {
+	value = strings.TrimSpace(value)
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_' || r == '.':
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func removeStaleShards(repo string, shards []ShardEntry) error {

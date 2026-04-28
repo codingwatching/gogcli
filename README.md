@@ -756,7 +756,11 @@ per-file export into an encrypted error row instead of wedging the run. Gmail
 raw-message fetches and message-list pages use a local cache by default so
 interrupted full-mailbox backups can resume. Full Gmail runs build encrypted
 message shards from cached messages instead of keeping the whole mailbox in
-memory; progress is written to stderr while stdout stays parseable. Use
+memory; progress is written to stderr while stdout stays parseable. Cached
+Gmail runs also push incomplete encrypted checkpoint commits during long fetches
+by default (`--gmail-checkpoint-rows`, `--gmail-checkpoint-interval`,
+`--no-gmail-checkpoints`). Checkpoints live under `checkpoints/` and do not
+replace the authoritative `manifest.json` until the final backup completes. Use
 `--gmail-refresh-cache` to force a refetch. Workspace inventories
 Docs/Sheets/Slides and backs up Forms/responses discovered through Drive; add
 `--workspace-native` for full native Docs/Sheets/Slides API JSON.
