@@ -19,7 +19,7 @@ Fast, script-friendly CLI for Gmail, Calendar, Chat, Classroom, Drive, Docs, Sli
 - **Sheets** - read/write/update spreadsheets, insert rows/cols, manage tabs and named ranges, format/merge/freeze/resize cells, read/write notes, inspect formats, find/replace text, list links, and create/export sheets
 - **Forms** - create/update forms, manage questions, inspect responses, and manage watches
 - **Apps Script** - create/get/bind projects, inspect content, and run functions
-- **Docs/Slides** - create/copy/export docs/slides, edit Docs by tab title or ID, import Markdown, do richer find-replace, export Docs as Markdown/HTML, and generate Slides from Markdown or templates
+- **Docs/Slides** - create/copy/export docs/slides, edit Docs by tab title or ID, import Markdown, do richer find-replace, export whole Docs or a single Docs tab, and generate Slides from Markdown or templates
 - **People** - profile lookup and directory search helpers
 - **Keep (Workspace only)** - list/get/search/create/delete notes and download attachments (service account + domain-wide delegation)
 - **Admin (Workspace only)** - Workspace Admin users/groups commands for common directory operations
@@ -1022,6 +1022,7 @@ gog drive download <fileId> --out ./downloaded.bin
 gog drive download <fileId> --format pdf --out ./exported.pdf     # Google Workspace files only
 gog drive download <fileId> --format docx --out ./doc.docx
 gog drive download <fileId> --format md --out ./note.md            # Google Doc → Markdown
+gog drive download <fileId> --tab "Notes" --format pdf --out ./notes.pdf
 gog drive download <fileId> --format pptx --out ./slides.pptx
 gog drive download <fileId> --out - > downloaded.bin
 
@@ -1444,7 +1445,11 @@ gog docs export <docId> --format md --out ./doc.md
 gog docs export <docId> --format html --out ./doc.html
 gog docs export <docId> --format txt --out - > doc.txt
 gog docs export <docId> --tab "Notes" --format md --out ./notes.md
+```
 
+`docs export` uses Drive export for whole-document downloads. `--tab` is experimental: Google Drive cannot export a single Docs tab, so gog resolves the tab title or ID with the Docs API and downloads that tab through Google's undocumented Docs web export endpoint. Use `gog docs list-tabs <docId>` to see tab titles/IDs. Tab export supports `pdf`, `docx`, `txt`, `md`, and `html`, including `--out -`; if Google changes that web endpoint, gog fails before writing sign-in HTML or unrelated redirect content.
+
+```bash
 # Sed-style regex editing with Markdown formatting (sedmat)
 gog docs sed <docId> 's/pattern/replacement/g'
 
