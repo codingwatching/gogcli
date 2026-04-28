@@ -531,7 +531,7 @@ func fetchUserIdentityDefault(ctx context.Context, tok *oauth2.Token) (Identity,
 	}
 
 	if raw, ok := tok.Extra("id_token").(string); ok && raw != "" {
-		if identity, err := identityFromIDToken(raw); err == nil {
+		if identity, err := IdentityFromIDToken(raw); err == nil {
 			return identity, nil
 		}
 	}
@@ -614,7 +614,7 @@ func fetchUserIdentityWithURL(ctx context.Context, accessToken string, url strin
 }
 
 func emailFromIDToken(idToken string) (string, error) {
-	identity, err := identityFromIDToken(idToken)
+	identity, err := IdentityFromIDToken(idToken)
 	if err != nil {
 		return "", err
 	}
@@ -622,7 +622,7 @@ func emailFromIDToken(idToken string) (string, error) {
 	return identity.Email, nil
 }
 
-func identityFromIDToken(idToken string) (Identity, error) {
+func IdentityFromIDToken(idToken string) (Identity, error) {
 	parts := strings.Split(idToken, ".")
 	if len(parts) < 2 {
 		return Identity{}, errInvalidIDToken

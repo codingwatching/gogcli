@@ -853,9 +853,9 @@ func TestEmailFromIDToken(t *testing.T) {
 			t.Fatalf("expected me@example.com, got %q", email)
 		}
 
-		identity, err := identityFromIDToken(idToken)
+		identity, err := IdentityFromIDToken(idToken)
 		if err != nil {
-			t.Fatalf("identityFromIDToken: %v", err)
+			t.Fatalf("IdentityFromIDToken: %v", err)
 		}
 
 		if identity.Subject != "sub-123" || identity.Email != "me@example.com" {

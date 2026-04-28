@@ -47,7 +47,7 @@ func IdentityForRefreshToken(ctx context.Context, client string, refreshToken st
 	}
 
 	if raw, ok := tok.Extra("id_token").(string); ok {
-		if identity, err := identityFromIDToken(raw); err == nil {
+		if identity, err := IdentityFromIDToken(raw); err == nil {
 			return identity, nil
 		}
 	}

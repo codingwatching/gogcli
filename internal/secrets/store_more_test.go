@@ -223,6 +223,33 @@ func TestKeyringStoreSubjectKeyRoundTripAndDelete(t *testing.T) {
 	}
 }
 
+func TestKeyringStoreDeleteTokenAliasPreservesSubjectKey(t *testing.T) {
+	ring := keyring.NewArrayKeyring(nil)
+	store := &KeyringStore{ring: ring}
+	client := config.DefaultClientName
+
+	tok := Token{
+		Subject:      "google-sub-123",
+		Email:        "old@example.com",
+		RefreshToken: "rt",
+	}
+	if err := store.SetToken(client, tok.Email, tok); err != nil {
+		t.Fatalf("SetToken: %v", err)
+	}
+
+	if err := store.DeleteTokenAlias(client, "old@example.com"); err != nil {
+		t.Fatalf("DeleteTokenAlias: %v", err)
+	}
+
+	if _, err := ring.Get(tokenKey(client, "old@example.com")); !errors.Is(err, keyring.ErrKeyNotFound) {
+		t.Fatalf("expected email token removed, got %v", err)
+	}
+
+	if _, err := ring.Get(subjectTokenKey(client, tok.Subject)); err != nil {
+		t.Fatalf("expected subject key preserved, got %v", err)
+	}
+}
+
 func TestKeyringStoreSetTokenRemovesStaleSubjectKey(t *testing.T) {
 	ring := keyring.NewArrayKeyring(nil)
 	store := &KeyringStore{ring: ring}

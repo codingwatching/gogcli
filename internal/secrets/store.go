@@ -520,6 +520,32 @@ func (s *KeyringStore) DeleteToken(client string, email string) error {
 	return nil
 }
 
+// DeleteTokenAlias removes only the email-address key for a token, preserving
+// the subject-keyed canonical copy.
+func (s *KeyringStore) DeleteTokenAlias(client string, email string) error {
+	email = normalize(email)
+	if email == "" {
+		return errMissingEmail
+	}
+
+	normalizedClient, err := normalizeClient(client)
+	if err != nil {
+		return err
+	}
+
+	if err := s.ring.Remove(tokenKey(normalizedClient, email)); err != nil && !errors.Is(err, keyring.ErrKeyNotFound) {
+		return fmt.Errorf("delete token alias: %w", err)
+	}
+
+	if normalizedClient == config.DefaultClientName {
+		if err := s.ring.Remove(legacyTokenKey(email)); err != nil && !errors.Is(err, keyring.ErrKeyNotFound) {
+			return fmt.Errorf("delete legacy token alias: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (s *KeyringStore) ListTokens() ([]Token, error) {
 	keys, err := s.Keys()
 	if err != nil {
