@@ -197,6 +197,9 @@ func (c *DriveDownloadCmd) Run(ctx context.Context, flags *RootFlags) error {
 	if err != nil {
 		return err
 	}
+	if outfmt.IsJSON(ctx) && isStdoutPath(destPath) {
+		return usage("can't combine --json with --out -")
+	}
 
 	downloadedPath, size, err := downloadDriveFile(ctx, svc, meta, destPath, c.Format)
 	if err != nil {
@@ -208,6 +211,9 @@ func (c *DriveDownloadCmd) Run(ctx context.Context, flags *RootFlags) error {
 			"path": downloadedPath,
 			"size": size,
 		})
+	}
+	if isStdoutPath(downloadedPath) {
+		return nil
 	}
 
 	u.Out().Printf("path\t%s", downloadedPath)
@@ -936,7 +942,11 @@ func downloadDriveFile(ctx context.Context, svc *drive.Service, meta *drive.File
 				return "", 0, mimeErr
 			}
 		}
-		outPath = replaceExt(destPath, driveExportExtension(exportMimeType))
+		if isStdoutPath(destPath) {
+			outPath = stdoutPath
+		} else {
+			outPath = replaceExt(destPath, driveExportExtension(exportMimeType))
+		}
 		resp, err = driveExportDownload(ctx, svc, meta.Id, exportMimeType)
 	} else {
 		outPath = destPath
@@ -950,6 +960,11 @@ func downloadDriveFile(ctx context.Context, svc *drive.Service, meta *drive.File
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return "", 0, fmt.Errorf("download failed: %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+
+	if isStdoutPath(outPath) {
+		n, copyErr := io.Copy(os.Stdout, resp.Body)
+		return stdoutPath, n, copyErr
 	}
 
 	f, outPath, err := createUserOutputFile(outPath)

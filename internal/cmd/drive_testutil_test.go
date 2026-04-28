@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"google.golang.org/api/drive/v3"
@@ -36,6 +38,23 @@ func stubDriveServiceForTest(t *testing.T, svc *drive.Service) {
 	origNew := newDriveService
 	t.Cleanup(func() { newDriveService = origNew })
 	newDriveService = stubDriveService(svc)
+}
+
+func newDriveMetadataTestService(t *testing.T, mimeType string) (*drive.Service, func()) {
+	t.Helper()
+
+	return newDriveTestService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || !strings.Contains(r.URL.Path, "/files/id1") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":       "id1",
+			"name":     "Doc",
+			"mimeType": mimeType,
+		})
+	}))
 }
 
 func requireQuery(t *testing.T, r *http.Request, key, want string) {

@@ -26,9 +26,11 @@ Each service command is a thin wrapper:
 - Type guard: compare `mimeType` and error with `file is not a <KindLabel> (mimeType="...")`.
 - `--out` defaults to `$(os.UserConfigDir())/gogcli/drive-downloads/` (via `internal/config:EnsureDriveDownloadsDir`).
 - `--out` can be dir or explicit file path (via `internal/cmd/drive_download_helpers.go:resolveDriveDownloadDestPath`).
+- `--out -` writes export bytes to stdout; JSON mode rejects it to avoid mixing metadata with bytes.
 - Output
   - `--json`: `{ "path": "...", "size": <bytes> }`
   - text: `path\t...` / `size\t...`
+  - `--out -`: raw bytes only, no path/size status on stdout
 
 ## Add a new export command
 

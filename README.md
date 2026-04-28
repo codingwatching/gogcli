@@ -597,6 +597,7 @@ Some open source Google CLIs ship a pre-configured OAuth client ID/secret copied
 Flag aliases:
 - `--out` also accepts `--output`.
 - `--out-dir` also accepts `--output-dir` (Gmail thread attachment downloads).
+- Drive download/export commands accept `--out -` to write file bytes to stdout; do not combine this with `--json`.
 
 ### Authentication
 
@@ -1002,6 +1003,7 @@ gog drive download <fileId> --format pdf --out ./exported.pdf     # Google Works
 gog drive download <fileId> --format docx --out ./doc.docx
 gog drive download <fileId> --format md --out ./note.md            # Google Doc → Markdown
 gog drive download <fileId> --format pptx --out ./slides.pptx
+gog drive download <fileId> --out - > downloaded.bin
 
 # Organize
 gog drive mkdir "New Folder"
@@ -1034,6 +1036,7 @@ gog docs create "My Doc" --file ./doc.md            # Import markdown
 gog docs create "My Doc" --pageless
 gog docs copy <docId> "My Doc Copy"
 gog docs export <docId> --format pdf --out ./doc.pdf
+gog docs export <docId> --format txt --out - > doc.txt
 gog docs list-tabs <docId>
 gog docs cat <docId> --tab "Notes"
 gog docs cat <docId> --all-tabs
@@ -1418,6 +1421,7 @@ gog docs export <docId> --format docx --out ./doc.docx
 gog docs export <docId> --format txt --out ./doc.txt
 gog docs export <docId> --format md --out ./doc.md
 gog docs export <docId> --format html --out ./doc.html
+gog docs export <docId> --format txt --out - > doc.txt
 
 # Sed-style regex editing with Markdown formatting (sedmat)
 gog docs sed <docId> 's/pattern/replacement/g'

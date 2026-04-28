@@ -18,6 +18,7 @@
 
 ### Fixed
 - Calendar: display `calendar events` times and JSON local fields in the calendar timezone instead of preserving arbitrary event offsets. (#493)
+- Drive/Docs/Sheets/Slides: treat `--out -` as stdout for downloads and exports instead of creating `-`/`-.ext` files; reject `--json --out -` to keep byte streams parseable. (#286)
 - Docs: deprecate editing-command `--tab-id` in favor of `--tab`, and resolve tab titles to canonical tab IDs before mutations. (#533) — thanks @johnbenjaminlewis.
 - Docs: convert Markdown formatting for `docs write --append --markdown` instead of appending raw Markdown syntax. (#530, #272) — thanks @eric-x-liu.
 - CLI: show direct Google Cloud API enablement links and matching `auth add --services ...` hints when Google returns API-not-enabled errors.
