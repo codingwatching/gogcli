@@ -141,6 +141,25 @@ func TestPushCheckpointWritesIncompleteManifestOutsideMainSnapshot(t *testing.T)
 	}
 }
 
+func TestCommitAndPushRemovesInterruptedShardTemps(t *testing.T) {
+	ctx, repo, config, _ := initTestBackup(t)
+	temp := filepath.Join(repo, "checkpoints", "gmail", "acct", "run-one", "messages", ".shard-interrupted.age")
+	if err := os.MkdirAll(filepath.Dir(temp), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(temp, []byte("partial ciphertext"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	pushSingleShard(t, ctx, config, mustGmailMessageShard(t, "data/gmail/acct/messages/2026/04/part-0001.jsonl.gz.age", []map[string]string{{"id": "m1", "raw": "final"}}))
+	if _, err := os.Stat(temp); !os.IsNotExist(err) {
+		t.Fatalf("temp shard should be removed before commit: %v", err)
+	}
+	if err := git(ctx, repo, "ls-files", "--error-unmatch", "checkpoints/gmail/acct/run-one/messages/.shard-interrupted.age"); err == nil {
+		t.Fatal("temp shard was committed")
+	}
+}
+
 func TestCatAndDecryptSnapshotVerifyPlaintext(t *testing.T) {
 	ctx, repo, config, _ := initTestBackup(t)
 	shardPath := "data/gmail/acct/messages/2026/04/part-0001.jsonl.gz.age"

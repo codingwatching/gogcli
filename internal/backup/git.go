@@ -54,6 +54,9 @@ func ensureRepo(ctx context.Context, cfg Config) error {
 }
 
 func commitAndPush(ctx context.Context, cfg Config, message string, push bool) (bool, error) {
+	if err := removeTempShardFiles(cfg.Repo); err != nil {
+		return false, err
+	}
 	if err := git(ctx, cfg.Repo, "add", "."); err != nil {
 		return false, err
 	}

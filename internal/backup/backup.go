@@ -760,3 +760,25 @@ func removeStaleShards(repo string, shards []ShardEntry) error {
 	}
 	return nil
 }
+
+func removeTempShardFiles(repo string) error {
+	for _, rootName := range []string{"data", "checkpoints"} {
+		root := filepath.Join(repo, rootName)
+		if _, err := os.Stat(root); os.IsNotExist(err) {
+			continue
+		}
+		if err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d == nil || d.IsDir() {
+				return err
+			}
+			name := d.Name()
+			if strings.HasPrefix(name, ".shard-") && strings.HasSuffix(name, ".age") {
+				return os.Remove(path) //nolint:gosec // repo-owned temp shard paths come from WalkDir below configured backup roots.
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
