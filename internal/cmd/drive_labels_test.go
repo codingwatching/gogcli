@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"google.golang.org/api/drivelabels/v2"
@@ -59,5 +61,12 @@ func TestNormalizeDriveLabelName(t *testing.T) {
 	}
 	if got := normalizeDriveLabelName("labels/abc"); got != "labels/abc" {
 		t.Fatalf("unexpected: %q", got)
+	}
+}
+
+func TestWrapDriveLabelsErrorValidCustomer(t *testing.T) {
+	err := wrapDriveLabelsError(errors.New("Cannot perform this action without a valid customer"))
+	if err == nil || !strings.Contains(err.Error(), "requires a Google Workspace customer") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"google.golang.org/api/drivelabels/v2"
 	gapi "google.golang.org/api/googleapi"
 
+	"github.com/steipete/gogcli/internal/errfmt"
 	"github.com/steipete/gogcli/internal/googleapi"
 	"github.com/steipete/gogcli/internal/outfmt"
 	"github.com/steipete/gogcli/internal/ui"
@@ -24,7 +25,7 @@ type DriveLabelsCmd struct {
 type DriveLabelsListCmd struct {
 	Max           int64  `name:"max" aliases:"limit" help:"Max results" default:"50"`
 	Page          string `name:"page" aliases:"cursor" help:"Page token"`
-	Customer      string `name:"customer" help:"Customer resource (for example customers/123abc789); default: labels visible to caller"`
+	Customer      string `name:"customer" help:"Customer resource (for example customers/123abc789); Google Workspace customer required"`
 	Language      string `name:"language" help:"BCP-47 language code"`
 	View          string `name:"view" help:"Label view: LABEL_VIEW_BASIC|LABEL_VIEW_FULL" default:"LABEL_VIEW_BASIC"`
 	MinimumRole   string `name:"minimum-role" help:"Minimum role filter (for example READER, APPLIER, ORGANIZER)"`
@@ -66,7 +67,7 @@ func (c *DriveLabelsListCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 	resp, err := call.Fields(gapi.Field(fields)).Do()
 	if err != nil {
-		return err
+		return wrapDriveLabelsError(err)
 	}
 
 	if outfmt.IsJSON(ctx) {
@@ -133,7 +134,7 @@ func (c *DriveLabelsGetCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 	label, err := call.Fields(gapi.Field(fields)).Do()
 	if err != nil {
-		return err
+		return wrapDriveLabelsError(err)
 	}
 	if outfmt.IsJSON(ctx) {
 		return outfmt.WriteJSON(ctx, os.Stdout, map[string]any{"label": label})
@@ -173,4 +174,14 @@ func driveLabelState(label *drivelabels.GoogleAppsDriveLabelsV2Label) string {
 		return ""
 	}
 	return label.Lifecycle.State
+}
+
+func wrapDriveLabelsError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(err.Error(), "without a valid customer") {
+		return errfmt.NewUserFacingError("Drive Labels API requires a Google Workspace customer; consumer Google accounts may not have a valid customer.", err)
+	}
+	return err
 }

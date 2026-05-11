@@ -162,7 +162,7 @@ gog calendar create primary --summary "Coffee" \
   --location-search "Elysian Coffee Vancouver"
 gog calendar update primary <eventId> --with-meet
 gog calendar move primary <eventId> team-calendar@example.com
-gog calendar appointments --week --json
+gog calendar appointments
 ```
 
 ### Drive
@@ -179,6 +179,7 @@ gog drive du --parent <folderId> --max 20 --json
 gog drive inventory --parent <folderId> --json
 gog drive audit sharing --parent <folderId> --internal-domain example.com --json
 gog drive labels list --json
+# Drive Labels requires a Google Workspace customer.
 
 # Ask Drive for non-default fields.
 gog drive get <fileId> --fields 'id,name,mimeType,size,owners,emailAddress' --json

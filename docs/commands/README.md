@@ -124,7 +124,7 @@ Generated pages: 538.
       - [gog calendar alias list](gog-calendar-alias-list.md) - List calendar aliases
       - [gog calendar alias set](gog-calendar-alias-set.md) - Set a calendar alias
       - [gog calendar alias unset](gog-calendar-alias-unset.md) - Remove a calendar alias
-    - [gog calendar appointments](gog-calendar-appointments.md) - List appointment schedule events
+    - [gog calendar appointments](gog-calendar-appointments.md) - Report Calendar appointment schedule API limitation
     - [gog calendar calendars](gog-calendar-calendars.md) - List calendars
     - [gog calendar colors](gog-calendar-colors.md) - Show calendar colors
     - [gog calendar conflicts](gog-calendar-conflicts.md) - Find conflicts

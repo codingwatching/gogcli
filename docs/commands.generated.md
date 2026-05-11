@@ -2,7 +2,7 @@
 
 Generated from `gog schema --json`.
 
-- [`gog <command> [flags]`](commands/gog.md) - Google CLI for Gmail/Calendar/Chat/Classroom/Drive/Contacts/Tasks/Sheets/Docs/Slides/People/Forms/Meet/App Script/Analytics/Search Console/Ads/Groups/Admin/Keep/YouTube
+- [`gog <command> [flags]`](commands/gog.md) - Google CLI for Gmail/Calendar/Chat/Classroom/Drive/Contacts/Tasks/Sheets/Docs/Slides/People/Forms/Meet/App Script/Analytics/Search Console/Ads/Groups/Admin/Keep/YouTube/Maps/Photos
   - [`gog admin <command> [flags]`](commands/gog-admin.md) - Google Workspace Admin (Directory API) - requires domain-wide delegation
     - [`gog admin groups <command>`](commands/gog-admin-groups.md) - Manage Workspace groups
       - [`gog admin groups list (ls) [flags]`](commands/gog-admin-groups-list.md) - List groups in a domain
@@ -74,6 +74,7 @@ Generated from `gog schema --json`.
       - [`gog calendar (cal) alias list`](commands/gog-calendar-alias-list.md) - List calendar aliases
       - [`gog calendar (cal) alias set <alias> <calendarId>`](commands/gog-calendar-alias-set.md) - Set a calendar alias
       - [`gog calendar (cal) alias unset <alias>`](commands/gog-calendar-alias-unset.md) - Remove a calendar alias
+    - [`gog calendar (cal) appointments (appointment-schedules,appt)`](commands/gog-calendar-appointments.md) - Report Calendar appointment schedule API limitation
     - [`gog calendar (cal) calendars [flags]`](commands/gog-calendar-calendars.md) - List calendars
     - [`gog calendar (cal) colors`](commands/gog-calendar-colors.md) - Show calendar colors
     - [`gog calendar (cal) conflicts [flags]`](commands/gog-calendar-conflicts.md) - Find conflicts
@@ -247,6 +248,8 @@ Generated from `gog schema --json`.
   - [`gog drive (drv) <command> [flags]`](commands/gog-drive.md) - Google Drive
     - [`gog drive (drv) activity <command>`](commands/gog-drive-activity.md) - Query Drive Activity audit events
       - [`gog drive (drv) activity query (list,ls) [flags]`](commands/gog-drive-activity-query.md) - Query Drive Activity API v2
+    - [`gog drive (drv) audit <command>`](commands/gog-drive-audit.md) - Audit Drive sharing without mutation
+      - [`gog drive (drv) audit sharing (permissions,perms,public,external) [flags]`](commands/gog-drive-audit-sharing.md) - Find public or external Drive permissions
     - [`gog drive (drv) changes <command>`](commands/gog-drive-changes.md) - Track Drive changes for sync and automation
       - [`gog drive (drv) changes list (ls) --token=STRING [flags]`](commands/gog-drive-changes-list.md) - List Drive changes since a page token
       - [`gog drive (drv) changes start-token (token) [flags]`](commands/gog-drive-changes-start-token.md) - Get a Drive changes start page token
@@ -266,6 +269,9 @@ Generated from `gog schema --json`.
     - [`gog drive (drv) du [flags]`](commands/gog-drive-du.md) - Summarize Drive folder sizes
     - [`gog drive (drv) get <fileId> [flags]`](commands/gog-drive-get.md) - Get file metadata
     - [`gog drive (drv) inventory [flags]`](commands/gog-drive-inventory.md) - Export a read-only Drive inventory
+    - [`gog drive (drv) labels (label) <command>`](commands/gog-drive-labels.md) - Read Drive label schemas
+      - [`gog drive (drv) labels (label) get (info,show) <name> [flags]`](commands/gog-drive-labels-get.md) - Get a Drive label schema
+      - [`gog drive (drv) labels (label) list (ls) [flags]`](commands/gog-drive-labels-list.md) - List Drive label schemas
     - [`gog drive (drv) ls [flags]`](commands/gog-drive-ls.md) - List files in a folder (default: root)
     - [`gog drive (drv) mkdir <name> [flags]`](commands/gog-drive-mkdir.md) - Create a folder
     - [`gog drive (drv) move <fileId> [flags]`](commands/gog-drive-move.md) - Move a file to a different folder
@@ -390,6 +396,10 @@ Generated from `gog schema --json`.
   - [`gog login <email> [flags]`](commands/gog-login.md) - Authorize and store a refresh token (alias for 'auth add')
   - [`gog logout <email> [flags]`](commands/gog-logout.md) - Remove a stored refresh token (alias for 'auth remove')
   - [`gog ls (list) [flags]`](commands/gog-ls.md) - List Drive files (alias for 'drive ls')
+  - [`gog maps (map) <command> [flags]`](commands/gog-maps.md) - Google Maps
+    - [`gog maps (map) places (place) <command>`](commands/gog-maps-places.md) - Google Maps Places API
+      - [`gog maps (map) places (place) details (get,info,show) <placeId> [flags]`](commands/gog-maps-places-details.md) - Get Place details
+      - [`gog maps (map) places (place) search (find) <query> ... [flags]`](commands/gog-maps-places-search.md) - Search Places by text
   - [`gog me [flags]`](commands/gog-me.md) - Show your profile (alias for 'people me')
   - [`gog meet (meeting) <command> [flags]`](commands/gog-meet.md) - Google Meet
     - [`gog meet (meeting) create (new) [flags]`](commands/gog-meet-create.md) - Create a meeting space
@@ -405,6 +415,11 @@ Generated from `gog schema --json`.
     - [`gog people (person) raw <userId> [flags]`](commands/gog-people-raw.md) - Dump raw People API response as JSON (People.Get; lossless; for scripting and LLM consumption)
     - [`gog people (person) relations [<userId>] [flags]`](commands/gog-people-relations.md) - Get user relations
     - [`gog people (person) search (find,query) <query> ... [flags]`](commands/gog-people-search.md) - Search the Workspace directory
+  - [`gog photos (photo) <command> [flags]`](commands/gog-photos.md) - Google Photos Library API (app-created media)
+    - [`gog photos (photo) download (dl) <mediaItemId> [flags]`](commands/gog-photos-download.md) - Download an app-created media item
+    - [`gog photos (photo) get (info,show) <mediaItemId>`](commands/gog-photos-get.md) - Get an app-created media item
+    - [`gog photos (photo) list (ls) [flags]`](commands/gog-photos-list.md) - List app-created media items
+    - [`gog photos (photo) search (find) [flags]`](commands/gog-photos-search.md) - Search app-created media items
   - [`gog schema (help-json,helpjson) [<command> ...] [flags]`](commands/gog-schema.md) - Machine-readable command/flag schema
   - [`gog search (find) <query> ... [flags]`](commands/gog-search.md) - Search Drive files (alias for 'drive search')
   - [`gog searchconsole (gsc,search-console,webmasters) <command> [flags]`](commands/gog-searchconsole.md) - Google Search Console

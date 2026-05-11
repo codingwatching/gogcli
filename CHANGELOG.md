@@ -4,7 +4,7 @@
 
 ### Added
 
-- Calendar: add read-only `calendar appointments` listing for appointment schedule events via the Calendar events API. (#329)
+- Calendar: add `calendar appointments` with a clear diagnostic that Google Calendar appointment schedules are not currently exposed by the Calendar API. (#329)
 - Drive: add read-only `drive audit sharing` to find public and external permissions across a file or folder tree. (#336)
 - Drive: add `drive labels list|get` for read-only Drive Labels API v2 discovery. (#339)
 - Maps: add `maps places search|details` backed by the existing Places API-key configuration. (#571)

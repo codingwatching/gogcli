@@ -196,13 +196,15 @@ func listDrivePermissionsForAudit(ctx context.Context, svc *drive.Service, fileI
 	out := make([]*drive.Permission, 0, 8)
 	var pageToken string
 	for {
-		resp, err := svc.Permissions.List(fileID).
+		call := svc.Permissions.List(fileID).
 			SupportsAllDrives(true).
 			PageSize(100).
-			PageToken(pageToken).
 			Fields("nextPageToken,permissions(id,type,role,emailAddress,domain,displayName,allowFileDiscovery,deleted,expirationTime,permissionDetails(permissionType,role,inherited,inheritedFrom))").
-			Context(ctx).
-			Do()
+			Context(ctx)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+		resp, err := call.Do()
 		if err != nil {
 			return nil, err
 		}

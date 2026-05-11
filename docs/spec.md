@@ -215,14 +215,14 @@ Flag aliases:
 - `gog drive changes stop <channelId> <resourceId>`
 - `gog drive activity query [--file FILE_ID|--folder FOLDER_ID] [--actions edit,share] [--from RFC3339] [--to RFC3339] [--filter FILTER]`
 - `gog drive audit sharing [--file FILE_ID|--parent FOLDER_ID] [--depth N] [--max N] [--internal-domain DOMAIN] [--public-only|--external-only] [--fail-found]`
-- `gog drive labels list [--max N] [--page TOKEN] [--customer CUSTOMERS_ID] [--published-only]`
-- `gog drive labels get <labelId|labels/ID> [--view basic|full]`
+- `gog drive labels list [--max N] [--page TOKEN] [--customer CUSTOMERS_ID] [--published-only]` (requires a Google Workspace customer)
+- `gog drive labels get <labelId|labels/ID> [--view basic|full]` (requires a Google Workspace customer)
 - `gog slides thumbnail <presentationId> <slideId> [--size small|medium|large] [--format png|jpeg] [--out PATH]`
 - `gog calendar calendars`
 - `gog calendar create-calendar <summary> [--description D] [--timezone TZ] [--location L]`
 - `gog calendar acl <calendarId>`
 - `gog calendar events <calendarId> [--cal ID_OR_NAME] [--calendars CSV] [--all] [--from RFC3339] [--to RFC3339] [--max N] [--page TOKEN] [--query Q] [--weekday]`
-- `gog calendar appointments [<calendarId>] [--cal ID_OR_NAME] [--calendars CSV] [--all] [--from RFC3339] [--to RFC3339] [--today|--week|--days N] [--max N] [--page TOKEN]`
+- `gog calendar appointments` (reports that Google Calendar appointment schedules are not currently exposed by the Calendar API)
 - `gog calendar event|get <calendarId> <eventId>`
 - `GOG_CALENDAR_WEEKDAY=1` defaults `--weekday` for `gog calendar events`
 - `gog calendar create <calendarId> --summary S --from DT --to DT [--start-timezone TZ] [--end-timezone TZ] [--description D] [--location L|--location-search Q|--place-id ID] [--place-language LANG] [--place-region REGION] [--attendees a@b.com,c@d.com] [--all-day] [--event-type TYPE]`
