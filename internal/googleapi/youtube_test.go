@@ -21,16 +21,23 @@ func TestNewYouTubeAPIKeyHTTPClientAddsKeyWithRetryTransport(t *testing.T) {
 		if got := r.URL.Query().Get("key"); got != "test-key" {
 			t.Fatalf("key = %q", got)
 		}
+
 		if got := r.URL.Query().Get("part"); got != "snippet" {
 			t.Fatalf("part = %q", got)
 		}
+
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
 
-	resp, err := client.Get(srv.URL + "/youtube/v3/videos?part=snippet")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+"/youtube/v3/videos?part=snippet", nil)
 	if err != nil {
-		t.Fatalf("Get: %v", err)
+		t.Fatalf("NewRequestWithContext: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
 	}
 	defer resp.Body.Close()
 
