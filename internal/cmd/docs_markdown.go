@@ -218,6 +218,12 @@ func isTableSeparator(line string) bool {
 	inner := strings.Trim(trimmed, "|")
 	// Split by | and check each segment
 	segments := strings.Split(inner, "|")
+	// A genuine separator must have at least one segment that actually contains
+	// dashes. Without this guard a row of empty pipe cells (e.g. an empty
+	// markdown table header `|     |     |`) would be misclassified as a
+	// separator because every segment hits the `continue` and never trips the
+	// dash check — see #609.
+	sawDashSegment := false
 	for _, seg := range segments {
 		seg = strings.TrimSpace(seg)
 		if seg == "" {
@@ -237,8 +243,9 @@ func isTableSeparator(line string) bool {
 		if strings.Count(seg, "-") == 0 {
 			return false
 		}
+		sawDashSegment = true
 	}
-	return len(segments) > 1
+	return sawDashSegment && len(segments) > 1
 }
 
 // parseMarkdownTable parses a markdown table into rows of cells

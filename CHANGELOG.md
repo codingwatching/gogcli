@@ -15,6 +15,7 @@
 - Release: update the Homebrew handoff to publish through `openclaw/tap`.
 - Version: `gog --version` now reports an informative fallback (for example, `v0.17.0-dev`) when built from source with plain `go build` instead of returning `dev`.
 - Docs: `gog docs insert` now defaults to end-of-doc when `--index` is omitted, instead of always inserting at position 1 (which silently reversed iterative inserts across multiple calls). Pass `--index 1` explicitly to keep the previous behaviour. (#606)
+- Docs: markdown empty-header table rows (e.g. `|   |   |`) no longer collide with the separator detection — previously `docs write --append --markdown` swallowed both the empty header and the real `|---|---|` separator, leaving the last data row re-parsed as a literal pipe paragraph after the table. (#609)
 
 ## 0.17.0 - 2026-05-15
 

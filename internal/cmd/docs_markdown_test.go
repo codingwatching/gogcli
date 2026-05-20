@@ -335,3 +335,52 @@ func TestParseMarkdown_TableDoesNotSkipFollowingLine(t *testing.T) {
 		t.Fatalf("second element = %#v, want paragraph 'After table'", got[1])
 	}
 }
+
+func TestIsTableSeparator_EmptyPipeRowRejected(t *testing.T) {
+	// Regression for #609: a row of empty pipe cells (e.g. an empty markdown
+	// table header) must not be classified as a separator line. Otherwise the
+	// outer parser drops a row from the table and re-parses the next data line
+	// as a literal pipe paragraph.
+	tests := []struct {
+		name string
+		line string
+		want bool
+	}{
+		{"empty cells", "|     |     |", false},
+		{"empty cells tight", "||", false},
+		{"empty cells three cols", "|   |   |   |", false},
+		{"normal separator", "|---|---|", true},
+		{"spaced separator", "| --- | --- |", true},
+		{"left align", "|:---|---|", true},
+		{"center align", "|:---:|---:|", true},
+		{"mixed empty+dashes still valid", "|---|   |", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isTableSeparator(tt.line); got != tt.want {
+				t.Errorf("isTableSeparator(%q) = %v, want %v", tt.line, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseMarkdown_EmptyHeaderTableKeepsAllDataRows(t *testing.T) {
+	// Regression for #609: an empty-header table previously had its last data
+	// row re-parsed as a literal pipe paragraph (because the empty pipe row
+	// matched isTableSeparator and the outer loop advanced too far).
+	input := "|     |     |\n|-----|-----|\n| Label A | Value A |\n| Label B | Value B |"
+	got := ParseMarkdown(input)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 element (table only), got %d: %#v", len(got), got)
+	}
+	if got[0].Type != MDTable {
+		t.Fatalf("element type = %v, want MDTable", got[0].Type)
+	}
+	if len(got[0].TableCells) != 3 {
+		t.Fatalf("expected 3 rows (empty header + 2 data), got %d: %#v", len(got[0].TableCells), got[0].TableCells)
+	}
+	last := got[0].TableCells[2]
+	if len(last) != 2 || last[0] != "Label B" || last[1] != "Value B" {
+		t.Fatalf("last row = %#v, want [Label B, Value B]", last)
+	}
+}
