@@ -2,7 +2,7 @@
 
 > Generated from `gog schema --json`. Do not edit this page by hand; run `make docs-commands`.
 
-Find conflicts
+Find busy-time overlaps across calendars
 
 ## Usage
 

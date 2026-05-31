@@ -130,7 +130,7 @@ Generated pages: 583.
     - [gog calendar appointments](gog-calendar-appointments.md) - Report Calendar appointment schedule API limitation
     - [gog calendar calendars](gog-calendar-calendars.md) - List calendars
     - [gog calendar colors](gog-calendar-colors.md) - Show calendar colors
-    - [gog calendar conflicts](gog-calendar-conflicts.md) - Find conflicts
+    - [gog calendar conflicts](gog-calendar-conflicts.md) - Find busy-time overlaps across calendars
     - [gog calendar create](gog-calendar-create.md) - Create an event
     - [gog calendar create-calendar](gog-calendar-create-calendar.md) - Create a new secondary calendar
     - [gog calendar delete](gog-calendar-delete.md) - Delete an event

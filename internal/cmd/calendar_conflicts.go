@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -40,12 +39,17 @@ func (c *CalendarConflictsCmd) Run(ctx context.Context, flags *RootFlags) error 
 		return err
 	}
 
-	calendarIDs, err := resolveSelectedCalendarIDs(ctx, svc, c.Cal, c.Calendars, c.All, true)
+	allCalendars := c.All
+	if !allCalendars && len(collectCalendarInputs(c.Cal, c.Calendars)) == 0 {
+		allCalendars = true
+	}
+
+	calendarIDs, err := resolveSelectedCalendarIDs(ctx, svc, c.Cal, c.Calendars, allCalendars, false)
 	if err != nil {
 		return err
 	}
-	if len(calendarIDs) == 0 {
-		return errors.New("no calendar IDs provided")
+	if len(calendarIDs) < 2 {
+		return usage("calendar conflicts requires at least two calendars; pass --all or multiple --cal/--calendars values")
 	}
 
 	// Use timezone-aware time resolution
@@ -132,7 +136,7 @@ func detectConflicts(calendars map[string]calendar.FreeBusyCalendar) []conflict 
 		}
 	}
 
-	var conflicts []conflict
+	conflicts := make([]conflict, 0)
 	seen := make(map[string]bool)
 
 	for i := 0; i < len(allBusy); i++ {

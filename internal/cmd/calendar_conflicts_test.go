@@ -158,8 +158,8 @@ func TestCalendarConflictsCmd_NoConflicts_JSON(t *testing.T) {
 	})
 
 	var parsed struct {
-		Conflicts []map[string]any `json:"conflicts"`
-		Count     int              `json:"count"`
+		Conflicts *[]map[string]any `json:"conflicts"`
+		Count     int               `json:"count"`
 	}
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("json parse: %v\nout=%q", err, out)
@@ -167,8 +167,11 @@ func TestCalendarConflictsCmd_NoConflicts_JSON(t *testing.T) {
 	if parsed.Count != 0 {
 		t.Errorf("expected count 0, got %d", parsed.Count)
 	}
-	if len(parsed.Conflicts) != 0 {
-		t.Errorf("expected 0 conflicts, got %d", len(parsed.Conflicts))
+	if parsed.Conflicts == nil {
+		t.Fatal("expected conflicts to be an empty array, got null")
+	}
+	if len(*parsed.Conflicts) != 0 {
+		t.Errorf("expected 0 conflicts, got %d", len(*parsed.Conflicts))
 	}
 }
 

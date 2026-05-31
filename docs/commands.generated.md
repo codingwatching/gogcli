@@ -78,7 +78,7 @@ Generated from `gog schema --json`.
     - [`gog calendar (cal) appointments (appointment-schedules,appt)`](commands/gog-calendar-appointments.md) - Report Calendar appointment schedule API limitation
     - [`gog calendar (cal) calendars [flags]`](commands/gog-calendar-calendars.md) - List calendars
     - [`gog calendar (cal) colors`](commands/gog-calendar-colors.md) - Show calendar colors
-    - [`gog calendar (cal) conflicts [flags]`](commands/gog-calendar-conflicts.md) - Find conflicts
+    - [`gog calendar (cal) conflicts [flags]`](commands/gog-calendar-conflicts.md) - Find busy-time overlaps across calendars
     - [`gog calendar (cal) create (add,new) <calendarId> [flags]`](commands/gog-calendar-create.md) - Create an event
     - [`gog calendar (cal) create-calendar (new-calendar) <summary> [flags]`](commands/gog-calendar-create-calendar.md) - Create a new secondary calendar
     - [`gog calendar (cal) delete (rm,del,remove) <calendarId> <eventId> [flags]`](commands/gog-calendar-delete.md) - Delete an event
