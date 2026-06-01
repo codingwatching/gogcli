@@ -18,6 +18,7 @@
 - Auth: return usage exit code 2 for unknown `--services` values instead of reporting them as generic runtime failures.
 - Auth: return usage exit code 2 for invalid service-account key JSON instead of reporting it as a generic runtime failure.
 - Auth: make `auth keep --dry-run` report the planned service-account paths without writing files.
+- Auth: make `zoom auth setup --dry-run` report a redacted plan without writing Zoom metadata or keyring secrets.
 - Admin: return usage exit code 2 for non-positive users/groups list `--max` values before account/workspace setup.
 - Admin: validate user and group member email inputs before reporting dry-run success.
 - Calendar: make `calendar conflicts` check all calendars by default and reject explicit one-calendar selections instead of silently reporting no cross-calendar conflicts.

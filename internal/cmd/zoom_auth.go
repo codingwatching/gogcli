@@ -36,6 +36,16 @@ var defaultZoomScopes = []string{"meeting:write", "meeting:read", "user:read"}
 func (c *ZoomAuthSetupCmd) Run(ctx context.Context, flags *RootFlags) error {
 	u := ui.FromContext(ctx)
 	alias := zoom.NormalizeAlias(c.Alias)
+	if err := dryRunExit(ctx, flags, "zoom.auth.setup", map[string]any{
+		"alias":             alias,
+		"account_id":        strings.TrimSpace(c.AccountID),
+		"client_id":         strings.TrimSpace(c.ClientID),
+		"client_secret_set": strings.TrimSpace(c.ClientSecret) != "",
+		"scopes":            defaultZoomScopes,
+		"skip_validate":     c.SkipValidate,
+	}); err != nil {
+		return err
+	}
 	if flags != nil && flags.NoInput && (strings.TrimSpace(c.AccountID) == "" || strings.TrimSpace(c.ClientID) == "" || strings.TrimSpace(c.ClientSecret) == "") {
 		return usage("provide --account-id, --client-id, and --client-secret with --no-input")
 	}
