@@ -664,6 +664,8 @@ func TestDriveUploadConvertMimeType(t *testing.T) {
 
 	if _, _, err = driveUploadConvertMimeType("photo.png", false, "not-a-target"); err == nil {
 		t.Fatalf("expected error for invalid --convert-to target")
+	} else if ExitCode(err) != 2 {
+		t.Fatalf("expected usage exit code 2, got %d (err=%v)", ExitCode(err), err)
 	}
 }
 
@@ -717,6 +719,8 @@ func TestDriveUpload_ConvertUnsupported(t *testing.T) {
 		t.Fatalf("expected error for unsupported --convert type")
 	} else if !strings.Contains(err.Error(), "--convert: unsupported") {
 		t.Fatalf("unexpected error: %v", err)
+	} else if ExitCode(err) != 2 {
+		t.Fatalf("expected usage exit code 2, got %d (err=%v)", ExitCode(err), err)
 	}
 	if newServiceCalled {
 		t.Fatalf("newDriveService should not be called when --convert validation fails")

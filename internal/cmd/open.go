@@ -58,7 +58,7 @@ func bestEffortWebURL(kind string, input string) string {
 		return ""
 	}
 
-	id := normalizeGoogleID(input)
+	id := openGoogleID(input)
 
 	switch kind {
 	case "drive", colorAuto:
@@ -141,7 +141,7 @@ func bestEffortWebURL(kind string, input string) string {
 		}
 		return ""
 	case "gmail-thread":
-		th := normalizeGmailThreadID(input)
+		th := openGmailThreadID(input)
 		if strings.TrimSpace(th) == "" {
 			return ""
 		}
@@ -149,4 +149,34 @@ func bestEffortWebURL(kind string, input string) string {
 	default:
 		return ""
 	}
+}
+
+func openGoogleID(input string) string {
+	trimmed := strings.TrimSpace(input)
+	id := normalizeGoogleID(trimmed)
+	if id == "" {
+		return ""
+	}
+	if parseMaybeURL(trimmed) != nil && id == trimmed {
+		return ""
+	}
+	if strings.ContainsAny(id, "/?#") {
+		return ""
+	}
+	return id
+}
+
+func openGmailThreadID(input string) string {
+	trimmed := strings.TrimSpace(input)
+	id := normalizeGmailThreadID(trimmed)
+	if id == "" {
+		return ""
+	}
+	if parseMaybeURL(trimmed) != nil && id == trimmed {
+		return ""
+	}
+	if strings.ContainsAny(id, "/?#") {
+		return ""
+	}
+	return id
 }

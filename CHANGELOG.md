@@ -55,12 +55,14 @@
 - Sheets: return usage exit code 2 for explicit negative `sheets freeze --rows` and `--cols` values instead of treating `-1` as the internal unset sentinel.
 - Maps: validate invalid `--mode`, `--units`, and reverse-geocode coordinates before API-key lookup, and use a generic Maps/Places API-key setup error across Maps and Calendar Places commands.
 - Docs/Sheets/Slides: report service-specific dry-run ops for `copy` commands instead of `drive.copy`.
+- Drive Upload: return usage exit code 2 for invalid `--convert-to` values and unsupported `--convert` file types instead of reporting them as generic runtime failures.
 - Docs: return usage exit code 2 when Markdown writes contain local image references that must be hosted at a public HTTPS URL.
 - Docs: return usage exit code 2 when `docs sed` table operations target missing or out-of-range tables, rows, or columns.
 - Docs: return usage exit code 2 when `docs sed` receives malformed expressions.
 - Docs: return usage exit code 2 when `docs cell-style` and `docs table-column-width` target missing or out-of-range tables or columns.
 - Docs: validate comment anchor JSON before dry-run instead of accepting invalid comment anchor requests.
 - CLI: report public command paths in dry-run op fields for service-account, Calendar, Forms, Meet, and Sheets named-range commands.
+- CLI: keep `open --type` explicit shortcuts from turning unsupported non-Google URLs into malformed Google editor URLs.
 - CLI: preserve command-local `--fields` API masks for Drive, Drive Labels, Sites, and Calendar Events instead of rewriting them to JSON `--select`.
 - Drive: return usage exit code 2 when `drive download --tab` rejects unsupported export formats.
 - Drive: return usage exit code 2 when `drive download --format` is used on binary/non-Google Workspace files.
