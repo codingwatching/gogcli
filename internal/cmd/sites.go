@@ -3,20 +3,16 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"google.golang.org/api/drive/v3"
 	gapi "google.golang.org/api/googleapi"
 
-	"github.com/steipete/gogcli/internal/googleapi"
 	"github.com/steipete/gogcli/internal/outfmt"
 	"github.com/steipete/gogcli/internal/ui"
 )
 
 const googleSitesQuery = "mimeType = '" + driveMimeGoogleSite + "'"
-
-var newSitesDriveService = googleapi.NewSitesDrive
 
 type SitesCmd struct {
 	List   SitesListCmd   `cmd:"" name:"list" aliases:"ls" help:"List Google Sites visible in Drive"`
@@ -133,7 +129,7 @@ func (c *SitesGetCmd) Run(ctx context.Context, flags *RootFlags) error {
 	}
 
 	if outfmt.IsJSON(ctx) {
-		return outfmt.WriteJSON(ctx, os.Stdout, map[string]any{"site": f})
+		return outfmt.WriteJSON(ctx, stdoutWriter(ctx), map[string]any{"site": f})
 	}
 
 	u.Out().Linef("id\t%s", f.Id)
@@ -172,7 +168,7 @@ func (c *SitesURLCmd) Run(ctx context.Context, flags *RootFlags) error {
 		}
 	}
 	if outfmt.IsJSON(ctx) {
-		return outfmt.WriteJSON(ctx, os.Stdout, map[string]any{"urls": urls})
+		return outfmt.WriteJSON(ctx, stdoutWriter(ctx), map[string]any{"urls": urls})
 	}
 	return nil
 }
@@ -205,7 +201,7 @@ func requireSitesDriveService(ctx context.Context, flags *RootFlags) (*drive.Ser
 	if err != nil {
 		return nil, err
 	}
-	return newSitesDriveService(ctx, account)
+	return sitesDriveService(ctx, account)
 }
 
 func siteWebLink(ctx context.Context, svc *drive.Service, siteID string) (string, error) {

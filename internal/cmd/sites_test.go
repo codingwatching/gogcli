@@ -2,23 +2,16 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 
-	"google.golang.org/api/drive/v3"
-
 	"github.com/steipete/gogcli/internal/outfmt"
-	"github.com/steipete/gogcli/internal/ui"
 )
 
 func TestSitesListAndSearchConstrainToGoogleSites(t *testing.T) {
-	origNew := newSitesDriveService
-	t.Cleanup(func() { newSitesDriveService = origNew })
-
 	var queries []string
 	svc, closeSrv := newDriveTestService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || !strings.HasSuffix(r.URL.Path, "/files") {
@@ -37,24 +30,17 @@ func TestSitesListAndSearchConstrainToGoogleSites(t *testing.T) {
 		})
 	}))
 	defer closeSrv()
-	newSitesDriveService = stubDriveService(svc)
 
 	flags := &RootFlags{Account: "a@b.com"}
 	var outBuf bytes.Buffer
-	u, err := ui.New(ui.Options{Stdout: &outBuf, Stderr: io.Discard, Color: "never"})
-	if err != nil {
-		t.Fatalf("ui.New: %v", err)
-	}
-	ctx := ui.WithUI(context.Background(), u)
+	ctx := withSitesDriveTestService(newCmdRuntimeOutputContext(t, &outBuf, io.Discard), svc)
 
-	tableOut := captureStdout(t, func() {
-		if err := runKong(t, &SitesListCmd{}, []string{}, ctx, flags); err != nil {
-			t.Fatalf("list: %v", err)
-		}
-		if err := runKong(t, &SitesSearchCmd{}, []string{"team"}, ctx, flags); err != nil {
-			t.Fatalf("search: %v", err)
-		}
-	})
+	if err := runKong(t, &SitesListCmd{}, []string{}, ctx, flags); err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if err := runKong(t, &SitesSearchCmd{}, []string{"team"}, ctx, flags); err != nil {
+		t.Fatalf("search: %v", err)
+	}
 
 	if len(queries) != 2 {
 		t.Fatalf("queries = %#v", queries)
@@ -64,25 +50,17 @@ func TestSitesListAndSearchConstrainToGoogleSites(t *testing.T) {
 			t.Fatalf("query missing sites/trashed constraints: %q", q)
 		}
 	}
-	if !strings.Contains(tableOut, "Team Site") || !strings.Contains(tableOut, "site") {
-		t.Fatalf("unexpected output: %q", tableOut)
+	if !strings.Contains(outBuf.String(), "Team Site") || !strings.Contains(outBuf.String(), "site") {
+		t.Fatalf("unexpected output: %q", outBuf.String())
 	}
 }
 
 func TestSitesListSearchInvalidMaxFailsBeforeService(t *testing.T) {
-	origNew := newSitesDriveService
-	t.Cleanup(func() { newSitesDriveService = origNew })
-	newSitesDriveService = func(context.Context, string) (*drive.Service, error) {
-		t.Fatalf("expected max validation to fail before creating sites drive service")
-		return nil, context.Canceled
-	}
-
 	flags := &RootFlags{Account: "a@b.com"}
-	u, err := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
-	if err != nil {
-		t.Fatalf("ui.New: %v", err)
-	}
-	ctx := ui.WithUI(context.Background(), u)
+	ctx := withSitesDriveTestServiceFactory(
+		newCmdRuntimeOutputContext(t, io.Discard, io.Discard),
+		unexpectedSitesDriveTestService(t, "expected max validation to fail before creating sites drive service"),
+	)
 	cases := []struct {
 		name string
 		cmd  any
@@ -104,9 +82,6 @@ func TestSitesListSearchInvalidMaxFailsBeforeService(t *testing.T) {
 }
 
 func TestSitesGetAndURL(t *testing.T) {
-	origNew := newSitesDriveService
-	t.Cleanup(func() { newSitesDriveService = origNew })
-
 	svc, closeSrv := newDriveTestService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/drive/v3/files/"), "/files/")
 		if id != "site1" {
@@ -123,15 +98,10 @@ func TestSitesGetAndURL(t *testing.T) {
 		})
 	}))
 	defer closeSrv()
-	newSitesDriveService = stubDriveService(svc)
 
 	flags := &RootFlags{Account: "a@b.com"}
 	var outBuf bytes.Buffer
-	u, err := ui.New(ui.Options{Stdout: &outBuf, Stderr: io.Discard, Color: "never"})
-	if err != nil {
-		t.Fatalf("ui.New: %v", err)
-	}
-	ctx := ui.WithUI(context.Background(), u)
+	ctx := withSitesDriveTestService(newCmdRuntimeOutputContext(t, &outBuf, io.Discard), svc)
 
 	if err := runKong(t, &SitesGetCmd{}, []string{"https://sites.google.com/d/site1/edit"}, ctx, flags); err != nil {
 		t.Fatalf("get: %v", err)
@@ -144,12 +114,49 @@ func TestSitesGetAndURL(t *testing.T) {
 		!strings.Contains(got, "site1\thttps://sites.google.com/d/site1/edit") {
 		t.Fatalf("unexpected output: %q", got)
 	}
+
+	t.Run("get json runtime output", func(t *testing.T) {
+		var jsonOut bytes.Buffer
+		jsonCtx := withSitesDriveTestService(newCmdRuntimeJSONOutputContext(t, &jsonOut, io.Discard), svc)
+		if err := (&SitesGetCmd{SiteID: "site1"}).Run(jsonCtx, flags); err != nil {
+			t.Fatalf("get JSON: %v", err)
+		}
+		var payload struct {
+			Site struct {
+				ID string `json:"id"`
+			} `json:"site"`
+		}
+		if err := json.Unmarshal(jsonOut.Bytes(), &payload); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if payload.Site.ID != "site1" {
+			t.Fatalf("site id = %q, want site1", payload.Site.ID)
+		}
+	})
+
+	t.Run("url json runtime output", func(t *testing.T) {
+		var jsonOut bytes.Buffer
+		jsonCtx := withSitesDriveTestService(newCmdRuntimeJSONOutputContext(t, &jsonOut, io.Discard), svc)
+		if err := (&SitesURLCmd{SiteIDs: []string{"site1"}}).Run(jsonCtx, flags); err != nil {
+			t.Fatalf("url JSON: %v", err)
+		}
+		var payload struct {
+			URLs []struct {
+				ID  string `json:"id"`
+				URL string `json:"url"`
+			} `json:"urls"`
+		}
+		if err := json.Unmarshal(jsonOut.Bytes(), &payload); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(payload.URLs) != 1 || payload.URLs[0].ID != "site1" ||
+			payload.URLs[0].URL != "https://sites.google.com/d/site1/edit" {
+			t.Fatalf("unexpected URLs: %#v", payload.URLs)
+		}
+	})
 }
 
 func TestSitesGetRejectsNonSite(t *testing.T) {
-	origNew := newSitesDriveService
-	t.Cleanup(func() { newSitesDriveService = origNew })
-
 	svc, closeSrv := newDriveTestService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -159,9 +166,11 @@ func TestSitesGetRejectsNonSite(t *testing.T) {
 		})
 	}))
 	defer closeSrv()
-	newSitesDriveService = stubDriveService(svc)
 
-	ctx := outfmt.WithMode(context.Background(), outfmt.Mode{JSON: true})
+	ctx := withSitesDriveTestService(
+		outfmt.WithMode(newCmdRuntimeOutputContext(t, io.Discard, io.Discard), outfmt.Mode{JSON: true}),
+		svc,
+	)
 	err := (&SitesGetCmd{SiteID: "doc1"}).Run(ctx, &RootFlags{Account: "a@b.com"})
 	if err == nil || !strings.Contains(err.Error(), "not a Google Site") {
 		t.Fatalf("expected not-site error, got %v", err)

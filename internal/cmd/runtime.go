@@ -62,6 +62,7 @@ func newDefaultRuntime() *app.Runtime {
 			PhotosPicker:    newPhotosPickerClient,
 			SearchConsole:   googleapi.NewSearchConsole,
 			Sheets:          googleapi.NewSheets,
+			SitesDrive:      googleapi.NewSitesDrive,
 			Slides:          googleapi.NewSlides,
 			Tasks:           googleapi.NewTasks,
 			Zoom:            newZoomMeetingClient,
@@ -152,6 +153,9 @@ func normalizedRuntime(runtime *app.Runtime) *app.Runtime {
 	}
 	if normalized.Services.Sheets == nil {
 		normalized.Services.Sheets = defaults.Services.Sheets
+	}
+	if normalized.Services.SitesDrive == nil {
+		normalized.Services.SitesDrive = defaults.Services.SitesDrive
 	}
 	if normalized.Services.Slides == nil {
 		normalized.Services.Slides = defaults.Services.Slides
@@ -361,6 +365,13 @@ func sheetsService(ctx context.Context, account string) (*sheets.Service, error)
 		return runtime.Services.Sheets(ctx, account)
 	}
 	return googleapi.NewSheets(ctx, account)
+}
+
+func sitesDriveService(ctx context.Context, account string) (*drive.Service, error) {
+	if runtime, ok := app.FromContext(ctx); ok && runtime.Services.SitesDrive != nil {
+		return runtime.Services.SitesDrive(ctx, account)
+	}
+	return googleapi.NewSitesDrive(ctx, account)
 }
 
 func tasksService(ctx context.Context, account string) (*tasks.Service, error) {

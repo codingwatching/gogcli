@@ -90,6 +90,7 @@ type Services struct {
 	PhotosPicker    PhotosPickerServiceFactory
 	SearchConsole   SearchConsoleServiceFactory
 	Sheets          SheetsServiceFactory
+	SitesDrive      DriveServiceFactory
 	Slides          SlidesServiceFactory
 	Tasks           TasksServiceFactory
 	Zoom            ZoomMeetingClientFactory

@@ -524,6 +524,31 @@ func TestSheetsServiceUsesRuntimeFactory(t *testing.T) {
 	}
 }
 
+func TestSitesDriveServiceUsesRuntimeFactory(t *testing.T) {
+	t.Parallel()
+
+	want := &drive.Service{}
+	var gotAccount string
+	runtime := &app.Runtime{Services: app.Services{
+		SitesDrive: func(_ context.Context, account string) (*drive.Service, error) {
+			gotAccount = account
+			return want, nil
+		},
+	}}
+	ctx := app.WithRuntime(context.Background(), runtime)
+
+	got, err := sitesDriveService(ctx, "test@example.com")
+	if err != nil {
+		t.Fatalf("sitesDriveService() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("sitesDriveService() = %p, want %p", got, want)
+	}
+	if gotAccount != "test@example.com" {
+		t.Fatalf("factory account = %q, want test@example.com", gotAccount)
+	}
+}
+
 func TestDriveDownloadOperationsUseRuntimeServices(t *testing.T) {
 	t.Parallel()
 
