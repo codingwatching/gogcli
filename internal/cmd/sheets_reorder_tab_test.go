@@ -9,10 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
-
-	"github.com/steipete/gogcli/internal/ui"
 )
 
 func newSheetsTestServer(t *testing.T, batchUpdateCapture *sheets.BatchUpdateSpreadsheetRequest, sheetsCatalog []map[string]any) (*sheets.Service, func()) {
@@ -41,30 +38,15 @@ func newSheetsTestServer(t *testing.T, batchUpdateCapture *sheets.BatchUpdateSpr
 	}))
 	t.Cleanup(srv.Close)
 
-	svc, err := sheets.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithHTTPClient(srv.Client()),
-		option.WithEndpoint(srv.URL+"/"),
-	)
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-	return svc, func() {}
+	return newSheetsServiceFromServer(t, srv), func() {}
 }
 
-func newSheetsCmdContext(t *testing.T) context.Context {
+func newSheetsCmdContext(t *testing.T, svc *sheets.Service) context.Context {
 	t.Helper()
-	u, err := ui.New(ui.Options{Stdout: io.Discard, Stderr: io.Discard, Color: "never"})
-	if err != nil {
-		t.Fatalf("ui.New: %v", err)
-	}
-	return ui.WithUI(context.Background(), u)
+	return withSheetsTestService(newCmdRuntimeOutputContext(t, io.Discard, io.Discard), svc)
 }
 
 func TestSheetsReorderTabCmd_ResolvesByName(t *testing.T) {
-	origNew := newSheetsService
-	t.Cleanup(func() { newSheetsService = origNew })
-
 	var captured sheets.BatchUpdateSpreadsheetRequest
 	svc, cleanup := newSheetsTestServer(t, &captured, []map[string]any{
 		{"properties": map[string]any{"sheetId": 11, "title": "First", "index": 0}},
@@ -72,10 +54,9 @@ func TestSheetsReorderTabCmd_ResolvesByName(t *testing.T) {
 		{"properties": map[string]any{"sheetId": 33, "title": "Third", "index": 2}},
 	})
 	defer cleanup()
-	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
 
 	flags := &RootFlags{Account: "a@b.com"}
-	ctx := newSheetsCmdContext(t)
+	ctx := newSheetsCmdContext(t, svc)
 
 	if err := runKong(t, &SheetsReorderTabCmd{}, []string{"s1", "--tab", "Third", "--to", "0"}, ctx, flags); err != nil {
 		t.Fatalf("reorder-tab: %v", err)
@@ -100,9 +81,6 @@ func TestSheetsReorderTabCmd_ResolvesByName(t *testing.T) {
 }
 
 func TestSheetsReorderTabCmd_AcceptsNumericSheetID(t *testing.T) {
-	origNew := newSheetsService
-	t.Cleanup(func() { newSheetsService = origNew })
-
 	var captured sheets.BatchUpdateSpreadsheetRequest
 	svc, cleanup := newSheetsTestServer(t, &captured, []map[string]any{
 		{"properties": map[string]any{"sheetId": 99, "title": "Only", "index": 0}},
@@ -110,10 +88,9 @@ func TestSheetsReorderTabCmd_AcceptsNumericSheetID(t *testing.T) {
 		{"properties": map[string]any{"sheetId": 101, "title": "Last", "index": 2}},
 	})
 	defer cleanup()
-	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
 
 	flags := &RootFlags{Account: "a@b.com"}
-	ctx := newSheetsCmdContext(t)
+	ctx := newSheetsCmdContext(t, svc)
 
 	if err := runKong(t, &SheetsReorderTabCmd{}, []string{"s1", "--tab", "99", "--to", "2"}, ctx, flags); err != nil {
 		t.Fatalf("reorder-tab: %v", err)
@@ -132,9 +109,6 @@ func TestSheetsReorderTabCmd_AcceptsNumericSheetID(t *testing.T) {
 }
 
 func TestSheetsReorderTabCmd_RightwardMoveAdjustsAPIIndex(t *testing.T) {
-	origNew := newSheetsService
-	t.Cleanup(func() { newSheetsService = origNew })
-
 	var captured sheets.BatchUpdateSpreadsheetRequest
 	svc, cleanup := newSheetsTestServer(t, &captured, []map[string]any{
 		{"properties": map[string]any{"sheetId": 11, "title": "First", "index": 0}},
@@ -142,10 +116,9 @@ func TestSheetsReorderTabCmd_RightwardMoveAdjustsAPIIndex(t *testing.T) {
 		{"properties": map[string]any{"sheetId": 33, "title": "Third", "index": 2}},
 	})
 	defer cleanup()
-	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
 
 	flags := &RootFlags{Account: "a@b.com"}
-	ctx := newSheetsCmdContext(t)
+	ctx := newSheetsCmdContext(t, svc)
 
 	if err := runKong(t, &SheetsReorderTabCmd{}, []string{"s1", "--tab", "First", "--to", "1"}, ctx, flags); err != nil {
 		t.Fatalf("reorder-tab: %v", err)
@@ -164,9 +137,6 @@ func TestSheetsReorderTabCmd_RightwardMoveAdjustsAPIIndex(t *testing.T) {
 }
 
 func TestSheetsReorderTabCmd_PrefersNumericTitleBeforeSheetID(t *testing.T) {
-	origNew := newSheetsService
-	t.Cleanup(func() { newSheetsService = origNew })
-
 	var captured sheets.BatchUpdateSpreadsheetRequest
 	svc, cleanup := newSheetsTestServer(t, &captured, []map[string]any{
 		{"properties": map[string]any{"sheetId": 11, "title": "2024", "index": 0}},
@@ -174,10 +144,9 @@ func TestSheetsReorderTabCmd_PrefersNumericTitleBeforeSheetID(t *testing.T) {
 		{"properties": map[string]any{"sheetId": 33, "title": "Last", "index": 2}},
 	})
 	defer cleanup()
-	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
 
 	flags := &RootFlags{Account: "a@b.com"}
-	ctx := newSheetsCmdContext(t)
+	ctx := newSheetsCmdContext(t, svc)
 
 	if err := runKong(t, &SheetsReorderTabCmd{}, []string{"s1", "--tab", "2024", "--to", "2"}, ctx, flags); err != nil {
 		t.Fatalf("reorder-tab: %v", err)
@@ -201,9 +170,6 @@ func TestSheetsReorderTabCmd_IndexZeroIsSerialized(t *testing.T) {
 	// would treat the call as a no-op move-to-current-position. We can't see
 	// ForceSendFields after a round-trip decode, so we capture the raw request
 	// body and assert "index":0 appears in the JSON.
-	origNew := newSheetsService
-	t.Cleanup(func() { newSheetsService = origNew })
-
 	var rawBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/sheets/v4")
@@ -232,18 +198,10 @@ func TestSheetsReorderTabCmd_IndexZeroIsSerialized(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	svc, err := sheets.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithHTTPClient(srv.Client()),
-		option.WithEndpoint(srv.URL+"/"),
-	)
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
+	svc := newSheetsServiceFromServer(t, srv)
 
 	flags := &RootFlags{Account: "a@b.com"}
-	ctx := newSheetsCmdContext(t)
+	ctx := newSheetsCmdContext(t, svc)
 
 	if err := runKong(t, &SheetsReorderTabCmd{}, []string{"s1", "--tab", "Second", "--to", "0"}, ctx, flags); err != nil {
 		t.Fatalf("reorder-tab: %v", err)
@@ -258,9 +216,6 @@ func TestSheetsReorderTabCmd_IndexZeroIsSerialized(t *testing.T) {
 }
 
 func TestSheetsReorderTabCmd_SheetIDZeroIsSerialized(t *testing.T) {
-	origNew := newSheetsService
-	t.Cleanup(func() { newSheetsService = origNew })
-
 	var rawBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/sheets/v4")
@@ -289,18 +244,10 @@ func TestSheetsReorderTabCmd_SheetIDZeroIsSerialized(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	svc, err := sheets.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithHTTPClient(srv.Client()),
-		option.WithEndpoint(srv.URL+"/"),
-	)
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
+	svc := newSheetsServiceFromServer(t, srv)
 
 	flags := &RootFlags{Account: "a@b.com"}
-	ctx := newSheetsCmdContext(t)
+	ctx := newSheetsCmdContext(t, svc)
 
 	if err := runKong(t, &SheetsReorderTabCmd{}, []string{"s1", "--tab", "First", "--to", "1"}, ctx, flags); err != nil {
 		t.Fatalf("reorder-tab: %v", err)
@@ -316,18 +263,14 @@ func TestSheetsReorderTabCmd_SheetIDZeroIsSerialized(t *testing.T) {
 }
 
 func TestSheetsReorderTabCmd_UnknownTabName(t *testing.T) {
-	origNew := newSheetsService
-	t.Cleanup(func() { newSheetsService = origNew })
-
 	var captured sheets.BatchUpdateSpreadsheetRequest
 	svc, cleanup := newSheetsTestServer(t, &captured, []map[string]any{
 		{"properties": map[string]any{"sheetId": 1, "title": "Sheet1", "index": 0}},
 	})
 	defer cleanup()
-	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
 
 	flags := &RootFlags{Account: "a@b.com"}
-	ctx := newSheetsCmdContext(t)
+	ctx := newSheetsCmdContext(t, svc)
 
 	err := runKong(t, &SheetsReorderTabCmd{}, []string{"s1", "--tab", "Nope", "--to", "1"}, ctx, flags)
 	if err == nil || !strings.Contains(err.Error(), `unknown tab "Nope"`) {
@@ -336,18 +279,14 @@ func TestSheetsReorderTabCmd_UnknownTabName(t *testing.T) {
 }
 
 func TestSheetsReorderTabCmd_UnknownNumericSheetID(t *testing.T) {
-	origNew := newSheetsService
-	t.Cleanup(func() { newSheetsService = origNew })
-
 	var captured sheets.BatchUpdateSpreadsheetRequest
 	svc, cleanup := newSheetsTestServer(t, &captured, []map[string]any{
 		{"properties": map[string]any{"sheetId": 1, "title": "Sheet1", "index": 0}},
 	})
 	defer cleanup()
-	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
 
 	flags := &RootFlags{Account: "a@b.com"}
-	ctx := newSheetsCmdContext(t)
+	ctx := newSheetsCmdContext(t, svc)
 
 	err := runKong(t, &SheetsReorderTabCmd{}, []string{"s1", "--tab", "99", "--to", "0"}, ctx, flags)
 	if err == nil || !strings.Contains(err.Error(), "unknown sheetId 99") {
@@ -356,19 +295,15 @@ func TestSheetsReorderTabCmd_UnknownNumericSheetID(t *testing.T) {
 }
 
 func TestSheetsReorderTabCmd_IndexOutOfRangeRejected(t *testing.T) {
-	origNew := newSheetsService
-	t.Cleanup(func() { newSheetsService = origNew })
-
 	var captured sheets.BatchUpdateSpreadsheetRequest
 	svc, cleanup := newSheetsTestServer(t, &captured, []map[string]any{
 		{"properties": map[string]any{"sheetId": 1, "title": "Sheet1", "index": 0}},
 		{"properties": map[string]any{"sheetId": 2, "title": "Sheet2", "index": 1}},
 	})
 	defer cleanup()
-	newSheetsService = func(context.Context, string) (*sheets.Service, error) { return svc, nil }
 
 	flags := &RootFlags{Account: "a@b.com"}
-	ctx := newSheetsCmdContext(t)
+	ctx := newSheetsCmdContext(t, svc)
 
 	err := runKong(t, &SheetsReorderTabCmd{}, []string{"s1", "--tab", "Sheet1", "--to", "2"}, ctx, flags)
 	if err == nil || !strings.Contains(err.Error(), "--to must be between 0 and 1") {
@@ -378,7 +313,7 @@ func TestSheetsReorderTabCmd_IndexOutOfRangeRejected(t *testing.T) {
 
 func TestSheetsReorderTabCmd_NegativeIndexRejected(t *testing.T) {
 	flags := &RootFlags{Account: "a@b.com"}
-	ctx := newSheetsCmdContext(t)
+	ctx := newCmdRuntimeOutputContext(t, io.Discard, io.Discard)
 	err := runKong(t, &SheetsReorderTabCmd{}, []string{"s1", "--tab", "x", "--to=-1"}, ctx, flags)
 	if err == nil || !strings.Contains(err.Error(), "--to must be >= 0") {
 		t.Fatalf("expected --to validation error, got %v", err)
