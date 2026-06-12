@@ -1,16 +1,14 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
+	"errors"
 	"strings"
 
 	"google.golang.org/api/sheets/v4"
 
 	"github.com/steipete/gogcli/internal/outfmt"
+	"github.com/steipete/gogcli/internal/sheetsformat"
 	"github.com/steipete/gogcli/internal/ui"
 )
 
@@ -40,7 +38,7 @@ func (c *SheetsFormatCmd) Run(ctx context.Context, flags *RootFlags) error {
 	if err != nil {
 		return usagef("read --format-json: %v", err)
 	}
-	if err = decodeCellFormatJSON(b, &format); err != nil {
+	if err = sheetsformat.Decode(b, &format); err != nil {
 		return usagef("invalid format JSON: %v", err)
 	}
 
@@ -48,21 +46,21 @@ func (c *SheetsFormatCmd) Run(ctx context.Context, flags *RootFlags) error {
 	var formatJSONPaths []string
 	if formatFields == "" {
 		var inferErr error
-		formatFields, formatJSONPaths, inferErr = inferFormatMaskFromCellFormatJSON(b)
+		formatFields, formatJSONPaths, inferErr = sheetsformat.InferMask(b)
 		if inferErr != nil {
-			return inferErr
+			return sheetsFormatInputError(inferErr)
 		}
 	} else {
-		if hasBoardersTypo(formatFields) {
+		if sheetsformat.HasBordersTypo(formatFields) {
 			return usage(`invalid --format-fields: found "boarders"; use "borders"`)
 		}
-		normalizedFields, paths := normalizeFormatMask(formatFields)
+		normalizedFields, paths := sheetsformat.NormalizeMask(formatFields)
 		if normalizedFields != "" {
 			formatFields = normalizedFields
 		}
 		formatJSONPaths = paths
 	}
-	if err = applyForceSendFields(&format, formatJSONPaths); err != nil {
+	if err = sheetsformat.ApplyForceSendFields(&format, formatJSONPaths); err != nil {
 		return usage(err.Error())
 	}
 
@@ -123,34 +121,10 @@ func (c *SheetsFormatCmd) Run(ctx context.Context, flags *RootFlags) error {
 	return nil
 }
 
-func decodeCellFormatJSON(data []byte, dst *sheets.CellFormat) error {
-	if dst == nil {
-		return fmt.Errorf("format is required")
+func sheetsFormatInputError(err error) error {
+	var validationErr sheetsformat.ValidationError
+	if errors.As(err, &validationErr) {
+		return usage(validationErr.Error())
 	}
-
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-
-	if err := dec.Decode(dst); err != nil {
-		return err
-	}
-	var extra any
-	if err := dec.Decode(&extra); err != io.EOF {
-		if err == nil {
-			return fmt.Errorf("multiple JSON values")
-		}
-		return err
-	}
-	return nil
-}
-
-func hasBoardersTypo(mask string) bool {
-	for _, part := range splitFieldMask(mask) {
-		for _, token := range strings.Split(part, ".") {
-			if strings.EqualFold(strings.TrimSpace(token), "boarders") {
-				return true
-			}
-		}
-	}
-	return false
+	return err
 }

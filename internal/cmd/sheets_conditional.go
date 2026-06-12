@@ -10,6 +10,7 @@ import (
 	"google.golang.org/api/sheets/v4"
 
 	"github.com/steipete/gogcli/internal/outfmt"
+	"github.com/steipete/gogcli/internal/sheetsformat"
 	"github.com/steipete/gogcli/internal/ui"
 )
 
@@ -269,18 +270,18 @@ func parseConditionalFormat(formatJSON, formatMask string, input io.Reader) (*sh
 		return nil, "", usagef("read --format-json: %v", err)
 	}
 	var format sheets.CellFormat
-	if err := decodeCellFormatJSON(b, &format); err != nil {
+	if err := sheetsformat.Decode(b, &format); err != nil {
 		return nil, "", usagef("invalid --format-json: %v", err)
 	}
 	formatFields := strings.TrimSpace(formatMask)
 	if formatFields != "" {
-		if hasBoardersTypo(formatFields) {
+		if sheetsformat.HasBordersTypo(formatFields) {
 			return nil, "", usage(`invalid --format-fields: found "boarders"; use "borders"`)
 		}
-		normalized, formatPaths := normalizeFormatMask(formatFields)
-		formatFields = strings.TrimPrefix(normalized, sheetsUserEnteredFormatPrefix+".")
-		formatFields = strings.ReplaceAll(formatFields, ","+sheetsUserEnteredFormatPrefix+".", ",")
-		if err := applyForceSendFields(&format, formatPaths); err != nil {
+		normalized, formatPaths := sheetsformat.NormalizeMask(formatFields)
+		formatFields = strings.TrimPrefix(normalized, sheetsformat.UserEnteredFormatPrefix+".")
+		formatFields = strings.ReplaceAll(formatFields, ","+sheetsformat.UserEnteredFormatPrefix+".", ",")
+		if err := sheetsformat.ApplyForceSendFields(&format, formatPaths); err != nil {
 			return nil, "", usage(err.Error())
 		}
 	}
