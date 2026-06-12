@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"testing"
 
 	"google.golang.org/api/sheets/v4"
 
-	"github.com/steipete/gogcli/internal/outfmt"
 	"github.com/steipete/gogcli/internal/sheetsbanding"
 	"github.com/steipete/gogcli/internal/sheetsconditional"
 )
@@ -161,22 +158,4 @@ func TestSheetsPresentationSchemas(t *testing.T) {
 			),
 		)
 	})
-}
-
-func renderPlainTable[T any](t *testing.T, rows []T, columns []outfmt.Column[T]) string {
-	t.Helper()
-
-	var output bytes.Buffer
-	ctx := outfmt.WithMode(context.Background(), outfmt.Mode{Plain: true})
-	if err := outfmt.WriteTable(ctx, &output, rows, columns); err != nil {
-		t.Fatalf("WriteTable: %v", err)
-	}
-	return output.String()
-}
-
-func assertTableOutput(t *testing.T, got, want string) {
-	t.Helper()
-	if got != want {
-		t.Fatalf("output = %q, want %q", got, want)
-	}
 }

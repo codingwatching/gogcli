@@ -100,23 +100,8 @@ func (c *AdminGroupsListCmd) Run(ctx context.Context, flags *RootFlags) error {
 		return failEmptyExit(c.FailEmpty)
 	}
 
-	w, flush := tableWriter(ctx)
-	defer flush()
-	fmt.Fprintln(w, "EMAIL\tNAME\tMEMBERS\tDESCRIPTION")
-	for _, group := range groups {
-		if group == nil {
-			continue
-		}
-		desc := group.Description
-		if len(desc) > 50 {
-			desc = desc[:47] + "..."
-		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n",
-			sanitizeTab(group.Email),
-			sanitizeTab(group.Name),
-			group.DirectMembersCount,
-			sanitizeTab(desc),
-		)
+	if err := outfmt.WriteTable(ctx, stdoutWriter(ctx), nonNilAdminRows(groups), adminGroupColumns()); err != nil {
+		return err
 	}
 	printNextPageHint(u, nextPageToken)
 	return nil
@@ -208,18 +193,8 @@ func (c *AdminGroupsMembersListCmd) Run(ctx context.Context, flags *RootFlags) e
 		return failEmptyExit(c.FailEmpty)
 	}
 
-	w, flush := tableWriter(ctx)
-	defer flush()
-	fmt.Fprintln(w, "EMAIL\tROLE\tTYPE")
-	for _, member := range members {
-		if member == nil {
-			continue
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n",
-			sanitizeTab(member.Email),
-			sanitizeTab(member.Role),
-			sanitizeTab(member.Type),
-		)
+	if err := outfmt.WriteTable(ctx, stdoutWriter(ctx), nonNilAdminRows(members), adminMemberColumns()); err != nil {
+		return err
 	}
 	printNextPageHint(u, nextPageToken)
 	return nil

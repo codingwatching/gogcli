@@ -110,31 +110,8 @@ func (c *AdminUsersListCmd) Run(ctx context.Context, flags *RootFlags) error {
 		return failEmptyExit(c.FailEmpty)
 	}
 
-	w, flush := tableWriter(ctx)
-	defer flush()
-	fmt.Fprintln(w, "EMAIL\tNAME\tSUSPENDED\tADMIN")
-	for _, user := range users {
-		if user == nil {
-			continue
-		}
-		suspended := "no"
-		if user.Suspended {
-			suspended = "yes"
-		}
-		isAdmin := "no"
-		if user.IsAdmin {
-			isAdmin = "yes"
-		}
-		name := ""
-		if user.Name != nil {
-			name = user.Name.FullName
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-			sanitizeTab(user.PrimaryEmail),
-			sanitizeTab(name),
-			suspended,
-			isAdmin,
-		)
+	if err := outfmt.WriteTable(ctx, stdoutWriter(ctx), nonNilAdminRows(users), adminUserColumns()); err != nil {
+		return err
 	}
 	printNextPageHint(u, nextPageToken)
 	return nil

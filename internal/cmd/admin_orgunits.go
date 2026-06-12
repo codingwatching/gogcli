@@ -52,22 +52,12 @@ func (c *AdminOrgunitsListCmd) Run(ctx context.Context, flags *RootFlags) error 
 		return nil
 	}
 
-	w, flush := tableWriter(ctx)
-	defer flush()
-	fmt.Fprintln(w, "PATH\tNAME\tID\tPARENT\tDESCRIPTION")
-	for _, ou := range resp.OrganizationUnits {
-		if ou == nil {
-			continue
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			sanitizeTab(ou.OrgUnitPath),
-			sanitizeTab(ou.Name),
-			sanitizeTab(ou.OrgUnitId),
-			sanitizeTab(ou.ParentOrgUnitPath),
-			sanitizeTab(ou.Description),
-		)
-	}
-	return nil
+	return outfmt.WriteTable(
+		ctx,
+		stdoutWriter(ctx),
+		nonNilAdminRows(resp.OrganizationUnits),
+		adminOrgUnitColumns(),
+	)
 }
 
 type AdminOrgunitsGetCmd struct {
