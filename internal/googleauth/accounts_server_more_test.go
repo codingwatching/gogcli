@@ -213,18 +213,13 @@ func TestManageServerHandleOAuthCallback_FetchEmailError(t *testing.T) {
 }
 
 func TestStartManageServerOpenStoreError(t *testing.T) {
-	origStore := openDefaultStore
+	launcher := newTestManagerLauncher(t, func(deps *ManagerLauncherDependencies) {
+		deps.OpenTokens = func(context.Context) (secrets.Store, error) {
+			return nil, errTestStoreBoom
+		}
+	})
 
-	t.Cleanup(func() { openDefaultStore = origStore })
-
-	openDefaultStore = func() (secrets.Store, error) {
-		return nil, errTestStoreBoom
-	}
-
-	if err := StartManageServer(context.Background(), ManageServerOptions{
-		Timeout:               time.Second,
-		UpdateEmailReferences: func(string, string) error { return nil },
-	}); err == nil {
+	if err := launcher.Start(context.Background(), ManageServerOptions{Timeout: time.Second}); err == nil {
 		t.Fatalf("expected error")
 	}
 }

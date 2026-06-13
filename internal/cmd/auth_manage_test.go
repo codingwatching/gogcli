@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/steipete/gogcli/internal/app"
+	"github.com/steipete/gogcli/internal/authclient"
 	"github.com/steipete/gogcli/internal/config"
 	"github.com/steipete/gogcli/internal/googleauth"
 )
@@ -37,15 +38,6 @@ func TestAuthManageCmd_ServicesAndOptions(t *testing.T) {
 	if got.RedirectURI != "https://gog.example.com/oauth2/callback" {
 		t.Fatalf("unexpected redirect uri: %q", got.RedirectURI)
 	}
-	if got.UpdateEmailReferences == nil {
-		t.Fatal("expected email reference updater")
-	}
-	if got.EnsureKeychainAccess == nil {
-		t.Fatal("expected keychain preflight")
-	}
-	if err := got.EnsureKeychainAccess(); err != nil {
-		t.Fatalf("file backend preflight: %v", err)
-	}
 	if len(got.Services) != 2 {
 		t.Fatalf("expected de-duped services, got %#v", got.Services)
 	}
@@ -59,11 +51,8 @@ func TestAuthManageCmdKeychainPreflightUsesRuntime(t *testing.T) {
 			called = true
 			return nil
 		}
-		runtime.Auth.StartManageServer = func(_ context.Context, opts googleauth.ManageServerOptions) error {
-			if opts.EnsureKeychainAccess == nil {
-				t.Fatal("expected keychain preflight")
-			}
-			return opts.EnsureKeychainAccess()
+		runtime.Auth.StartManageServer = func(ctx context.Context, _ googleauth.ManageServerOptions) error {
+			return ensureKeychainAccessIfNeeded(ctx)
 		}
 	})
 
@@ -87,6 +76,13 @@ func TestAuthManageCmd_InvalidService(t *testing.T) {
 		if !errors.As(err, &exitErr) || exitErr.Code != 2 {
 			t.Fatalf("expected usage exit code 2, got %#v", err)
 		}
+	}
+}
+
+func TestStartAuthManageServerRequiresRuntime(t *testing.T) {
+	err := startAuthManageServer(context.Background(), googleauth.ManageServerOptions{})
+	if !errors.Is(err, errRuntimeServiceRequired) {
+		t.Fatalf("error = %v, want %v", err, errRuntimeServiceRequired)
 	}
 }
 
@@ -144,8 +140,8 @@ func TestExecuteAuthManageUsesRuntimeEmailReferenceUpdater(t *testing.T) {
 	result := executeWithTestRuntime(t, []string{"auth", "manage"}, &app.Runtime{
 		Config: runtimeStore,
 		Auth: app.AuthOperations{
-			StartManageServer: func(_ context.Context, opts googleauth.ManageServerOptions) error {
-				return opts.UpdateEmailReferences("old@example.com", "new@example.com")
+			StartManageServer: func(ctx context.Context, _ googleauth.ManageServerOptions) error {
+				return authclient.UpdateEmailReferences(ctx, "old@example.com", "new@example.com")
 			},
 		},
 	})

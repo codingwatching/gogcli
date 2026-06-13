@@ -639,7 +639,8 @@ func tokenListHasEmail(tokens []secrets.Token, email string) bool {
 	return false
 }
 
-func fetchUserIdentityDefault(ctx context.Context, tok *oauth2.Token) (Identity, error) {
+// FetchUserIdentity resolves an OAuth token to a stable Google identity.
+func FetchUserIdentity(ctx context.Context, tok *oauth2.Token) (Identity, error) {
 	if tok == nil {
 		return Identity{}, errMissingToken
 	}
@@ -658,7 +659,7 @@ func fetchUserIdentityDefault(ctx context.Context, tok *oauth2.Token) (Identity,
 }
 
 func fetchUserEmailDefault(ctx context.Context, tok *oauth2.Token) (string, error) {
-	identity, err := fetchUserIdentityDefault(ctx, tok)
+	identity, err := FetchUserIdentity(ctx, tok)
 	if err != nil {
 		return "", err
 	}

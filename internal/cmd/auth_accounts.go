@@ -283,9 +283,6 @@ func (c *AuthManageCmd) Run(ctx context.Context, _ *RootFlags) error {
 		Client:       authclient.ClientOverrideFromContext(ctx),
 		ListenAddr:   strings.TrimSpace(c.ListenAddr),
 		RedirectURI:  redirectURI,
-		UpdateEmailReferences: func(oldEmail, newEmail string) error {
-			return authclient.UpdateEmailReferences(ctx, oldEmail, newEmail)
-		},
 	})
 }
 

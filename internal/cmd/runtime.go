@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	goruntime "runtime"
 	"time"
+
+	"golang.org/x/oauth2/google"
 
 	"github.com/steipete/gogcli/internal/app"
 	"github.com/steipete/gogcli/internal/authclient"
@@ -39,7 +43,6 @@ func newDefaultRuntime() *app.Runtime {
 		},
 		Auth: app.AuthOperations{
 			AuthorizeGoogle:         googleauth.Authorize,
-			StartManageServer:       googleauth.StartManageServer,
 			CheckRefreshToken:       googleauth.CheckRefreshToken,
 			EnsureKeychainAccess:    secrets.EnsureKeychainAccessContext,
 			FetchAuthorizedIdentity: googleauth.IdentityForRefreshToken,
@@ -117,14 +120,14 @@ func normalizeRuntimeAuth(runtime *app.Runtime, defaults *app.Runtime) {
 	if runtime.Auth.AuthorizeGoogle == nil {
 		runtime.Auth.AuthorizeGoogle = defaults.Auth.AuthorizeGoogle
 	}
-	if runtime.Auth.StartManageServer == nil {
-		runtime.Auth.StartManageServer = defaults.Auth.StartManageServer
-	}
 	if runtime.Auth.CheckRefreshToken == nil {
 		runtime.Auth.CheckRefreshToken = defaults.Auth.CheckRefreshToken
 	}
 	if runtime.Auth.EnsureKeychainAccess == nil {
 		runtime.Auth.EnsureKeychainAccess = defaults.Auth.EnsureKeychainAccess
+	}
+	if runtime.Auth.StartManageServer == nil {
+		runtime.Auth.StartManageServer = runtimeManageServerStarter(runtime)
 	}
 	if runtime.Auth.FetchAuthorizedIdentity == nil {
 		runtime.Auth.FetchAuthorizedIdentity = defaults.Auth.FetchAuthorizedIdentity
@@ -365,20 +368,56 @@ func stdinIsTerminal(ctx context.Context) bool {
 }
 
 func startAuthManageServer(ctx context.Context, options googleauth.ManageServerOptions) error {
-	if options.ReadCredentials == nil {
-		options.ReadCredentials = func(client string) (config.ClientCredentials, error) {
-			return authclient.ReadCredentials(ctx, client)
-		}
-	}
-	if options.EnsureKeychainAccess == nil {
-		options.EnsureKeychainAccess = func() error {
-			return ensureKeychainAccessIfNeeded(ctx)
-		}
-	}
 	if runtime, ok := app.FromContext(ctx); ok && runtime.Auth.StartManageServer != nil {
 		return runtime.Auth.StartManageServer(ctx, options)
 	}
-	return googleauth.StartManageServer(ctx, options)
+
+	return fmt.Errorf("%w: accounts manager", errRuntimeServiceRequired)
+}
+
+func runtimeManageServerStarter(runtime *app.Runtime) app.StartManageServerFunc {
+	return func(ctx context.Context, options googleauth.ManageServerOptions) error {
+		launcher, err := googleauth.NewManagerLauncher(runtimeManagerLauncherDependencies(runtime))
+		if err != nil {
+			return err
+		}
+
+		return launcher.Start(ctx, options)
+	}
+}
+
+func runtimeManagerLauncherDependencies(runtime *app.Runtime) googleauth.ManagerLauncherDependencies {
+	var output io.Writer
+	if runtime != nil {
+		output = runtime.IO.Err
+	}
+
+	return googleauth.ManagerLauncherDependencies{
+		OpenTokens: func(context.Context) (secrets.Store, error) {
+			if runtime == nil || runtime.Auth.OpenSecretsStore == nil {
+				return nil, fmt.Errorf("%w: accounts manager token store", errRuntimeServiceRequired)
+			}
+
+			return runtime.Auth.OpenSecretsStore()
+		},
+		ReadCredentials:       authclient.ReadCredentials,
+		UpdateEmailReferences: authclient.UpdateEmailReferences,
+		FetchIdentity:         googleauth.FetchUserIdentity,
+		EnsureKeychainAccess:  ensureKeychainAccessIfNeeded,
+		OpenBrowser: func(ctx context.Context, url string) error {
+			if runtime == nil || runtime.Services.OpenURL == nil {
+				return fmt.Errorf("%w: accounts manager browser", errRuntimeServiceRequired)
+			}
+
+			return runtime.Services.OpenURL(ctx, url)
+		},
+		Out: output,
+		Listen: func(ctx context.Context, network, address string) (net.Listener, error) {
+			return (&net.ListenConfig{}).Listen(ctx, network, address)
+		},
+		Random:        rand.Reader,
+		OAuthEndpoint: google.Endpoint,
+	}
 }
 
 func checkAuthRefreshToken(ctx context.Context, client, refreshToken string, scopes []string, timeout time.Duration) error {

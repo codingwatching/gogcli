@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"html/template"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,7 +25,10 @@ import (
 	"github.com/steipete/gogcli/internal/secrets"
 )
 
-var errBoom = errors.New("boom")
+var (
+	errBoom               = errors.New("boom")
+	errBrowserUnavailable = errors.New("browser unavailable")
+)
 
 func newTestManagerApplication(
 	t *testing.T,
@@ -85,6 +90,45 @@ func newTestManagerApplication(
 	}
 
 	return app
+}
+
+func newTestManagerLauncher(
+	t *testing.T,
+	edit func(*ManagerLauncherDependencies),
+) *ManagerLauncher {
+	t.Helper()
+
+	deps := ManagerLauncherDependencies{
+		OpenTokens: func(context.Context) (secrets.Store, error) {
+			return &fakeStore{}, nil
+		},
+		ReadCredentials: func(context.Context, string) (config.ClientCredentials, error) {
+			return config.ClientCredentials{ClientID: "id", ClientSecret: "secret"}, nil
+		},
+		UpdateEmailReferences: func(context.Context, string, string) error { return nil },
+		FetchIdentity:         FetchUserIdentity,
+		EnsureKeychainAccess:  func(context.Context) error { return nil },
+		OpenBrowser:           func(context.Context, string) error { return nil },
+		Out:                   io.Discard,
+		Listen: func(ctx context.Context, network, address string) (net.Listener, error) {
+			return (&net.ListenConfig{}).Listen(ctx, network, address)
+		},
+		Random: bytes.NewReader(make([]byte, 4096)),
+		OAuthEndpoint: oauth2.Endpoint{
+			AuthURL:  "https://example.com/auth",
+			TokenURL: "https://example.com/token",
+		},
+	}
+	if edit != nil {
+		edit(&deps)
+	}
+
+	launcher, err := NewManagerLauncher(deps)
+	if err != nil {
+		t.Fatalf("NewManagerLauncher: %v", err)
+	}
+
+	return launcher
 }
 
 func managerRandom(stateByte byte, verifierByte byte) (*bytes.Reader, string, string) {
@@ -969,7 +1013,9 @@ func TestManageServer_HandleOAuthCallback_MigratesAndDeletesAliasAfterSetToken(t
 }
 
 func TestStartManageServerRejectsNonLoopbackListenAddr(t *testing.T) {
-	err := StartManageServer(context.Background(), ManageServerOptions{
+	launcher := newTestManagerLauncher(t, nil)
+
+	err := launcher.Start(context.Background(), ManageServerOptions{
 		ListenAddr: "0.0.0.0:0",
 		Timeout:    50 * time.Millisecond,
 	})
@@ -982,13 +1028,92 @@ func TestStartManageServerRejectsNonLoopbackListenAddr(t *testing.T) {
 	}
 }
 
-func TestStartManageServerRequiresEmailReferenceUpdater(t *testing.T) {
-	err := StartManageServer(context.Background(), ManageServerOptions{
-		ListenAddr: "127.0.0.1:0",
-		Timeout:    50 * time.Millisecond,
+func TestNewManagerLauncherRequiresDependencies(t *testing.T) {
+	valid := ManagerLauncherDependencies{
+		OpenTokens: func(context.Context) (secrets.Store, error) { return &fakeStore{}, nil },
+		ReadCredentials: func(context.Context, string) (config.ClientCredentials, error) {
+			return config.ClientCredentials{}, nil
+		},
+		UpdateEmailReferences: func(context.Context, string, string) error { return nil },
+		FetchIdentity:         FetchUserIdentity,
+		EnsureKeychainAccess:  func(context.Context) error { return nil },
+		OpenBrowser:           func(context.Context, string) error { return nil },
+		Out:                   io.Discard,
+		Listen: func(ctx context.Context, network, address string) (net.Listener, error) {
+			return (&net.ListenConfig{}).Listen(ctx, network, address)
+		},
+		Random:        bytes.NewReader(make([]byte, 32)),
+		OAuthEndpoint: oauth2.Endpoint{AuthURL: "https://example.com/auth", TokenURL: "https://example.com/token"},
+	}
+
+	tests := []struct {
+		name string
+		edit func(*ManagerLauncherDependencies)
+		want error
+	}{
+		{name: "tokens", edit: func(deps *ManagerLauncherDependencies) { deps.OpenTokens = nil }, want: errManagerTokenOpenerRequired},
+		{name: "credentials", edit: func(deps *ManagerLauncherDependencies) { deps.ReadCredentials = nil }, want: errCredentialsReaderRequired},
+		{name: "updater", edit: func(deps *ManagerLauncherDependencies) { deps.UpdateEmailReferences = nil }, want: errManagerConfigUpdateRequired},
+		{name: "identity", edit: func(deps *ManagerLauncherDependencies) { deps.FetchIdentity = nil }, want: errManagerIdentityRequired},
+		{name: "keychain", edit: func(deps *ManagerLauncherDependencies) { deps.EnsureKeychainAccess = nil }, want: errManagerKeychainRequired},
+		{name: "browser", edit: func(deps *ManagerLauncherDependencies) { deps.OpenBrowser = nil }, want: errManagerBrowserRequired},
+		{name: "output", edit: func(deps *ManagerLauncherDependencies) { deps.Out = nil }, want: errManagerOutputRequired},
+		{name: "listener", edit: func(deps *ManagerLauncherDependencies) { deps.Listen = nil }, want: errManagerListenerRequired},
+		{name: "random", edit: func(deps *ManagerLauncherDependencies) { deps.Random = nil }, want: errManagerRandomRequired},
+		{name: "endpoint", edit: func(deps *ManagerLauncherDependencies) { deps.OAuthEndpoint = oauth2.Endpoint{} }, want: errManagerOAuthEndpointInvalid},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			deps := valid
+			tc.edit(&deps)
+
+			_, err := NewManagerLauncher(deps)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("error = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestManagerLauncherBindsApplicationDependenciesToStartContext(t *testing.T) {
+	type contextKey struct{}
+	startCtx := context.WithValue(context.Background(), contextKey{}, "start")
+	launcher := newTestManagerLauncher(t, func(deps *ManagerLauncherDependencies) {
+		deps.ReadCredentials = func(ctx context.Context, _ string) (config.ClientCredentials, error) {
+			if ctx.Value(contextKey{}) != "start" {
+				t.Fatalf("credentials context = %v", ctx.Value(contextKey{}))
+			}
+
+			return config.ClientCredentials{}, nil
+		}
+		deps.UpdateEmailReferences = func(ctx context.Context, _, _ string) error {
+			if ctx.Value(contextKey{}) != "start" {
+				t.Fatalf("updater context = %v", ctx.Value(contextKey{}))
+			}
+
+			return nil
+		}
+		deps.EnsureKeychainAccess = func(ctx context.Context) error {
+			if ctx.Value(contextKey{}) != "start" {
+				t.Fatalf("keychain context = %v", ctx.Value(contextKey{}))
+			}
+
+			return nil
+		}
 	})
-	if !errors.Is(err, errEmailReferenceUpdaterRequired) {
-		t.Fatalf("error = %v, want updater-required", err)
+
+	deps := launcher.applicationDependencies(startCtx, &fakeStore{})
+	if _, err := deps.ReadCredentials(""); err != nil {
+		t.Fatalf("ReadCredentials: %v", err)
+	}
+
+	if err := deps.UpdateEmailReferences("", ""); err != nil {
+		t.Fatalf("UpdateEmailReferences: %v", err)
+	}
+
+	if err := deps.EnsureKeychainAccess(context.Background()); err != nil {
+		t.Fatalf("EnsureKeychainAccess: %v", err)
 	}
 }
 
@@ -1058,7 +1183,7 @@ func TestManageServer_HandleOAuthCallback_Success_IDTokenEmail(t *testing.T) {
 			preflightCalled = true
 			return nil
 		},
-		FetchIdentity: fetchUserIdentityDefault,
+		FetchIdentity: FetchUserIdentity,
 		OAuthEndpoint: oauth2.Endpoint{AuthURL: "http://example.com/auth", TokenURL: srv.URL},
 	})
 	ms.addOAuthState("state1", testCodeVerifier)
@@ -1206,31 +1331,84 @@ func TestEmailFromIDToken(t *testing.T) {
 }
 
 func TestStartManageServer_Timeout(t *testing.T) {
-	origStore := openDefaultStore
-	origOpen := openBrowserFn
-
-	t.Cleanup(func() {
-		openDefaultStore = origStore
-		openBrowserFn = origOpen
+	var opened string
+	launcher := newTestManagerLauncher(t, func(deps *ManagerLauncherDependencies) {
+		deps.OpenBrowser = func(_ context.Context, url string) error {
+			opened = url
+			return nil
+		}
 	})
 
-	openDefaultStore = func() (secrets.Store, error) { return &fakeStore{}, nil }
-	var opened string
-	openBrowserFn = func(url string) error {
-		opened = url
-		return nil
-	}
-
 	ctx := context.Background()
-	if err := StartManageServer(ctx, ManageServerOptions{
-		Timeout:               50 * time.Millisecond,
-		UpdateEmailReferences: func(string, string) error { return nil },
-	}); err != nil {
-		t.Fatalf("StartManageServer: %v", err)
+	if err := launcher.Start(ctx, ManageServerOptions{Timeout: 50 * time.Millisecond}); err != nil {
+		t.Fatalf("ManagerLauncher.Start: %v", err)
 	}
 
 	if !strings.Contains(opened, "http://127.0.0.1:") {
 		t.Fatalf("expected browser URL, got %q", opened)
+	}
+}
+
+func TestManagerLauncherRoutesOutputAndClosesListener(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var output bytes.Buffer
+	var opened string
+	client := &http.Client{Timeout: time.Second}
+	launcher := newTestManagerLauncher(t, func(deps *ManagerLauncherDependencies) {
+		deps.Out = &output
+		deps.OpenBrowser = func(browserCtx context.Context, url string) error {
+			opened = url
+
+			for _, path := range []string{"/", "/accounts"} {
+				req, err := http.NewRequestWithContext(browserCtx, http.MethodGet, url+path, nil)
+				if err != nil {
+					t.Fatalf("create GET %s: %v", path, err)
+				}
+
+				resp, err := client.Do(req)
+				if err != nil {
+					t.Fatalf("GET %s: %v", path, err)
+				}
+
+				_ = resp.Body.Close()
+
+				if resp.StatusCode != http.StatusOK {
+					t.Fatalf("GET %s status = %d", path, resp.StatusCode)
+				}
+			}
+
+			cancel()
+
+			return errBrowserUnavailable
+		}
+	})
+
+	if err := launcher.Start(ctx, ManageServerOptions{Timeout: time.Second}); err != nil {
+		t.Fatalf("ManagerLauncher.Start: %v", err)
+	}
+
+	if !strings.Contains(output.String(), "If the browser doesn't open, visit: "+opened) {
+		t.Fatalf("missing fallback URL output: %q", output.String())
+	}
+
+	if !strings.Contains(output.String(), "Failed to open browser: "+errBrowserUnavailable.Error()) {
+		t.Fatalf("missing browser error output: %q", output.String())
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, opened+"/accounts", nil)
+	if err != nil {
+		t.Fatalf("create closed-listener request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+
+	if err == nil {
+		t.Fatal("expected listener to be closed")
 	}
 }
 
