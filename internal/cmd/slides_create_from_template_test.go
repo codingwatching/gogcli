@@ -5,89 +5,71 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"google.golang.org/api/drive/v3"
-	"google.golang.org/api/option"
 	"google.golang.org/api/slides/v1"
 )
 
+type slidesTemplateTestFixture struct {
+	driveRequest   *http.Request
+	slidesRequests []*slides.Request
+	driveService   *drive.Service
+	slidesService  *slides.Service
+}
+
+func newSlidesTemplateTestFixture(
+	t *testing.T,
+	templateID string,
+	copiedID string,
+	title string,
+	occurrences int64,
+) *slidesTemplateTestFixture {
+	t.Helper()
+	fixture := &slidesTemplateTestFixture{}
+	driveHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fixture.driveRequest = r
+		if r.Method != http.MethodPost || !strings.Contains(r.URL.Path, "/files/"+templateID+"/copy") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&drive.File{
+			Id: copiedID, Name: title, MimeType: "application/vnd.google-apps.presentation",
+			WebViewLink: "https://docs.google.com/presentation/d/" + copiedID + "/edit",
+		})
+	})
+	slidesHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/presentations/"+copiedID+":batchUpdate" {
+			http.NotFound(w, r)
+			return
+		}
+		var request slides.BatchUpdatePresentationRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		fixture.slidesRequests = request.Requests
+		replies := make([]*slides.Response, len(request.Requests))
+		for i := range request.Requests {
+			replies[i] = &slides.Response{ReplaceAllText: &slides.ReplaceAllTextResponse{OccurrencesChanged: occurrences}}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(&slides.BatchUpdatePresentationResponse{PresentationId: copiedID, Replies: replies})
+	})
+	var closeDrive, closeSlides func()
+	fixture.driveService, closeDrive = newGoogleTestService(t, driveHandler, drive.NewService)
+	fixture.slidesService, closeSlides = newGoogleTestService(t, slidesHandler, slides.NewService)
+	t.Cleanup(closeDrive)
+	t.Cleanup(closeSlides)
+	return fixture
+}
+
 func TestSlidesCreateFromTemplate_Basic(t *testing.T) {
-	var capturedDriveRequest *http.Request
-	var capturedSlidesRequests []*slides.Request
-
-	driveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedDriveRequest = r
-
-		// Handle copy request - the path includes /v3/files/{id}/copy
-		if r.Method == "POST" && strings.Contains(r.URL.Path, "/files/template123/copy") {
-			response := &drive.File{
-				Id:          "copied123",
-				Name:        "New Presentation",
-				MimeType:    "application/vnd.google-apps.presentation",
-				WebViewLink: "https://docs.google.com/presentation/d/copied123/edit",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
-
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer driveServer.Close()
-
-	slidesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && r.URL.Path == "/v1/presentations/copied123:batchUpdate" {
-			var req slides.BatchUpdatePresentationRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			capturedSlidesRequests = req.Requests
-
-			// Build response with replacement statistics
-			replies := make([]*slides.Response, len(req.Requests))
-			for i := range req.Requests {
-				replies[i] = &slides.Response{
-					ReplaceAllText: &slides.ReplaceAllTextResponse{
-						OccurrencesChanged: 2,
-					},
-				}
-			}
-
-			response := &slides.BatchUpdatePresentationResponse{
-				PresentationId: "copied123",
-				Replies:        replies,
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
-
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer slidesServer.Close()
-
-	// Create Drive service
-	driveSvc, err := drive.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithEndpoint(driveServer.URL))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create Slides service
-	slidesSvc, err := slides.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithEndpoint(slidesServer.URL))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fixture := newSlidesTemplateTestFixture(t, "template123", "copied123", "New Presentation", 2)
 
 	cmd := &SlidesCreateFromTemplateCmd{
 		TemplateID: "template123",
@@ -95,25 +77,25 @@ func TestSlidesCreateFromTemplate_Basic(t *testing.T) {
 		Replace:    []string{"name=John Doe", "company=ACME Corp"},
 	}
 
-	ctx := withSlidesAndDriveTestServices(newCmdRuntimeOutputContext(t, io.Discard, io.Discard), slidesSvc, driveSvc)
+	ctx := withSlidesAndDriveTestServices(newCmdRuntimeOutputContext(t, io.Discard, io.Discard), fixture.slidesService, fixture.driveService)
 
-	err = cmd.Run(ctx, &RootFlags{Account: "test@example.com"})
+	err := cmd.Run(ctx, &RootFlags{Account: "test@example.com"})
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
 	// Verify Drive API call
-	if capturedDriveRequest == nil {
+	if fixture.driveRequest == nil {
 		t.Fatal("Drive API was not called")
 	}
 
 	// Verify Slides API calls
-	if len(capturedSlidesRequests) != 2 {
-		t.Fatalf("Expected 2 replacement requests, got %d", len(capturedSlidesRequests))
+	if len(fixture.slidesRequests) != 2 {
+		t.Fatalf("Expected 2 replacement requests, got %d", len(fixture.slidesRequests))
 	}
 
-	got := make(map[string]string, len(capturedSlidesRequests))
-	for _, req := range capturedSlidesRequests {
+	got := make(map[string]string, len(fixture.slidesRequests))
+	for _, req := range fixture.slidesRequests {
 		if req.ReplaceAllText == nil {
 			t.Fatal("request is not ReplaceAllText")
 		}
@@ -147,68 +129,7 @@ func TestSlidesCreateFromTemplate_JSONFile(t *testing.T) {
 		t.Fatal(writeErr)
 	}
 
-	var capturedSlidesRequests []*slides.Request
-
-	driveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && strings.Contains(r.URL.Path, "/files/template456/copy") {
-			response := &drive.File{
-				Id:          "copied456",
-				Name:        "Test Presentation",
-				MimeType:    "application/vnd.google-apps.presentation",
-				WebViewLink: "https://docs.google.com/presentation/d/copied456/edit",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer driveServer.Close()
-
-	slidesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && r.URL.Path == "/v1/presentations/copied456:batchUpdate" {
-			var req slides.BatchUpdatePresentationRequest
-			if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
-				http.Error(w, decodeErr.Error(), http.StatusBadRequest)
-				return
-			}
-
-			capturedSlidesRequests = req.Requests
-
-			replies := make([]*slides.Response, len(req.Requests))
-			for i := range req.Requests {
-				replies[i] = &slides.Response{
-					ReplaceAllText: &slides.ReplaceAllTextResponse{
-						OccurrencesChanged: 1,
-					},
-				}
-			}
-
-			response := &slides.BatchUpdatePresentationResponse{
-				PresentationId: "copied456",
-				Replies:        replies,
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer slidesServer.Close()
-
-	driveSvc, err := drive.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithEndpoint(driveServer.URL))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	slidesSvc, err := slides.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithEndpoint(slidesServer.URL))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fixture := newSlidesTemplateTestFixture(t, "template456", "copied456", "Test Presentation", 1)
 
 	cmd := &SlidesCreateFromTemplateCmd{
 		TemplateID:   "template456",
@@ -216,7 +137,7 @@ func TestSlidesCreateFromTemplate_JSONFile(t *testing.T) {
 		Replacements: jsonFile,
 	}
 
-	ctx := withSlidesAndDriveTestServices(newCmdRuntimeOutputContext(t, io.Discard, io.Discard), slidesSvc, driveSvc)
+	ctx := withSlidesAndDriveTestServices(newCmdRuntimeOutputContext(t, io.Discard, io.Discard), fixture.slidesService, fixture.driveService)
 
 	err = cmd.Run(ctx, &RootFlags{Account: "test@example.com"})
 	if err != nil {
@@ -224,14 +145,14 @@ func TestSlidesCreateFromTemplate_JSONFile(t *testing.T) {
 	}
 
 	// Should have 4 replacements
-	if len(capturedSlidesRequests) != 4 {
-		t.Fatalf("Expected 4 replacement requests, got %d", len(capturedSlidesRequests))
+	if len(fixture.slidesRequests) != 4 {
+		t.Fatalf("Expected 4 replacement requests, got %d", len(fixture.slidesRequests))
 	}
 
 	// Verify type conversions
 	foundAge := false
 	foundActive := false
-	for _, req := range capturedSlidesRequests {
+	for _, req := range fixture.slidesRequests {
 		if req.ReplaceAllText != nil {
 			text := req.ReplaceAllText.ContainsText.Text
 			if text == "{{age}}" {
@@ -258,68 +179,7 @@ func TestSlidesCreateFromTemplate_JSONFile(t *testing.T) {
 }
 
 func TestSlidesCreateFromTemplate_ExactMode(t *testing.T) {
-	var capturedSlidesRequests []*slides.Request
-
-	driveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && strings.Contains(r.URL.Path, "/files/template789/copy") {
-			response := &drive.File{
-				Id:          "copied789",
-				Name:        "Exact Mode Test",
-				MimeType:    "application/vnd.google-apps.presentation",
-				WebViewLink: "https://docs.google.com/presentation/d/copied789/edit",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer driveServer.Close()
-
-	slidesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && r.URL.Path == "/v1/presentations/copied789:batchUpdate" {
-			var req slides.BatchUpdatePresentationRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			capturedSlidesRequests = req.Requests
-
-			replies := make([]*slides.Response, len(req.Requests))
-			for i := range req.Requests {
-				replies[i] = &slides.Response{
-					ReplaceAllText: &slides.ReplaceAllTextResponse{
-						OccurrencesChanged: 1,
-					},
-				}
-			}
-
-			response := &slides.BatchUpdatePresentationResponse{
-				PresentationId: "copied789",
-				Replies:        replies,
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer slidesServer.Close()
-
-	driveSvc, err := drive.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithEndpoint(driveServer.URL))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	slidesSvc, err := slides.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithEndpoint(slidesServer.URL))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fixture := newSlidesTemplateTestFixture(t, "template789", "copied789", "Exact Mode Test", 1)
 
 	cmd := &SlidesCreateFromTemplateCmd{
 		TemplateID: "template789",
@@ -328,20 +188,20 @@ func TestSlidesCreateFromTemplate_ExactMode(t *testing.T) {
 		Exact:      true,
 	}
 
-	ctx := withSlidesAndDriveTestServices(newCmdRuntimeOutputContext(t, io.Discard, io.Discard), slidesSvc, driveSvc)
+	ctx := withSlidesAndDriveTestServices(newCmdRuntimeOutputContext(t, io.Discard, io.Discard), fixture.slidesService, fixture.driveService)
 
-	err = cmd.Run(ctx, &RootFlags{Account: "test@example.com"})
+	err := cmd.Run(ctx, &RootFlags{Account: "test@example.com"})
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	if len(capturedSlidesRequests) != 1 {
-		t.Fatalf("Expected 1 replacement request, got %d", len(capturedSlidesRequests))
+	if len(fixture.slidesRequests) != 1 {
+		t.Fatalf("Expected 1 replacement request, got %d", len(fixture.slidesRequests))
 	}
 
 	// In exact mode, should search for "OLD_TEXT" not "{{OLD_TEXT}}"
-	if capturedSlidesRequests[0].ReplaceAllText.ContainsText.Text != "OLD_TEXT" {
-		t.Errorf("Expected 'OLD_TEXT', got %s", capturedSlidesRequests[0].ReplaceAllText.ContainsText.Text)
+	if fixture.slidesRequests[0].ReplaceAllText.ContainsText.Text != "OLD_TEXT" {
+		t.Errorf("Expected 'OLD_TEXT', got %s", fixture.slidesRequests[0].ReplaceAllText.ContainsText.Text)
 	}
 }
 
@@ -423,68 +283,7 @@ func TestSlidesCreateFromTemplate_CombineFileAndFlags(t *testing.T) {
 		t.Fatal(writeErr)
 	}
 
-	var capturedSlidesRequests []*slides.Request
-
-	driveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
-			response := &drive.File{
-				Id:          "copied999",
-				Name:        "Combined Test",
-				MimeType:    "application/vnd.google-apps.presentation",
-				WebViewLink: "https://docs.google.com/presentation/d/copied999/edit",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer driveServer.Close()
-
-	slidesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
-			var req slides.BatchUpdatePresentationRequest
-			if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
-				http.Error(w, decodeErr.Error(), http.StatusBadRequest)
-				return
-			}
-
-			capturedSlidesRequests = req.Requests
-
-			replies := make([]*slides.Response, len(req.Requests))
-			for i := range req.Requests {
-				replies[i] = &slides.Response{
-					ReplaceAllText: &slides.ReplaceAllTextResponse{
-						OccurrencesChanged: 1,
-					},
-				}
-			}
-
-			response := &slides.BatchUpdatePresentationResponse{
-				PresentationId: "copied999",
-				Replies:        replies,
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer slidesServer.Close()
-
-	driveSvc, err := drive.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithEndpoint(driveServer.URL))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	slidesSvc, err := slides.NewService(context.Background(),
-		option.WithoutAuthentication(),
-		option.WithEndpoint(slidesServer.URL))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fixture := newSlidesTemplateTestFixture(t, "template999", "copied999", "Combined Test", 1)
 
 	// Flag overrides file
 	cmd := &SlidesCreateFromTemplateCmd{
@@ -494,7 +293,7 @@ func TestSlidesCreateFromTemplate_CombineFileAndFlags(t *testing.T) {
 		Replace:      []string{"name=From Flag"},
 	}
 
-	ctx := withSlidesAndDriveTestServices(newCmdRuntimeOutputContext(t, io.Discard, io.Discard), slidesSvc, driveSvc)
+	ctx := withSlidesAndDriveTestServices(newCmdRuntimeOutputContext(t, io.Discard, io.Discard), fixture.slidesService, fixture.driveService)
 
 	err = cmd.Run(ctx, &RootFlags{Account: "test@example.com"})
 	if err != nil {
@@ -502,13 +301,13 @@ func TestSlidesCreateFromTemplate_CombineFileAndFlags(t *testing.T) {
 	}
 
 	// Should have 2 replacements (name and company)
-	if len(capturedSlidesRequests) != 2 {
-		t.Fatalf("Expected 2 replacement requests, got %d", len(capturedSlidesRequests))
+	if len(fixture.slidesRequests) != 2 {
+		t.Fatalf("Expected 2 replacement requests, got %d", len(fixture.slidesRequests))
 	}
 
 	// Verify that flag value overrides file value
 	foundNameOverride := false
-	for _, req := range capturedSlidesRequests {
+	for _, req := range fixture.slidesRequests {
 		if req.ReplaceAllText != nil && req.ReplaceAllText.ContainsText.Text == "{{name}}" {
 			foundNameOverride = true
 			if req.ReplaceAllText.ReplaceText != "From Flag" {
