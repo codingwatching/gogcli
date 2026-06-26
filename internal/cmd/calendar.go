@@ -20,6 +20,7 @@ type CalendarCmd struct {
 	ProposeTime     CalendarProposeTimeCmd     `cmd:"" name:"propose-time" help:"Generate URL to propose a new meeting time (browser-only feature)"`
 	Colors          CalendarColorsCmd          `cmd:"" name:"colors" help:"Show calendar colors"`
 	Conflicts       CalendarConflictsCmd       `cmd:"" name:"conflicts" help:"Find busy-time overlaps across calendars"`
+	Changed         CalendarChangedCmd         `cmd:"" name:"changed" help:"List most recently changed events (including deletions)"`
 	Search          CalendarSearchCmd          `cmd:"" name:"search" aliases:"find,query" help:"Search events"`
 	Time            CalendarTimeCmd            `cmd:"" name:"time" help:"Show server time"`
 	Users           CalendarUsersCmd           `cmd:"" name:"users" help:"List workspace users (use their email as calendar ID)"`

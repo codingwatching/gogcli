@@ -4,6 +4,7 @@
 
 ## 0.31.0 - 2026-06-24
 
+- Calendar: add `calendar changed` for listing recently modified events, including cancellations, across one or more calendars. (#875) — thanks @sorenisanerd.
 - Gmail: preserve HTML fragments from `--signature-file` instead of escaping their markup, without broadening HTML detection for message display or reply quoting. (#879) — thanks @kesslerio.
 - Docs: honor `--tab` when setting document layout so `page-layout --tab` (and `write --pageless --tab`) target the specified tab instead of always the default tab. Page layout is per-tab; previously these silently no-opped on secondary tabs of multi-tab documents. (#878) — thanks @atmasphere.
 - Auth: recover from corrupt stored OAuth token payloads by routing only classified decode corruption through the normal re-authentication flow while preserving operational keyring errors. (#872, #874) — thanks @KrasimirKralev.

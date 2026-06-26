@@ -31,6 +31,7 @@ gog --readonly --account user@example.com calendar events --today --json --wrap-
 | `acl` | List calendar ACL |
 | `alias` | Manage calendar aliases |
 | `calendars` | List calendars |
+| `changed` | List most recently changed events (including deletions) |
 | `colors` | Show calendar colors |
 | `conflicts` | Find busy-time overlaps across calendars |
 | `create` | Create an event |

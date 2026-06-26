@@ -86,6 +86,7 @@ Generated from `gog schema --json`.
       - [`gog calendar (cal) alias set <alias> <calendarId>`](commands/gog-calendar-alias-set.md) - Set a calendar alias
       - [`gog calendar (cal) alias unset <alias>`](commands/gog-calendar-alias-unset.md) - Remove a calendar alias
     - [`gog calendar (cal) calendars [flags]`](commands/gog-calendar-calendars.md) - List calendars
+    - [`gog calendar (cal) changed [<calendarId>] [flags]`](commands/gog-calendar-changed.md) - List most recently changed events (including deletions)
     - [`gog calendar (cal) colors`](commands/gog-calendar-colors.md) - Show calendar colors
     - [`gog calendar (cal) conflicts [flags]`](commands/gog-calendar-conflicts.md) - Find busy-time overlaps across calendars
     - [`gog calendar (cal) create (add,new) <calendarId> [flags]`](commands/gog-calendar-create.md) - Create an event
